@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.cs text
+*.cshtml text
+*.csproj text
+*.slnx text
+*.json text
+*.md text
+*.yml text
+*.css text
+*.ps1 text

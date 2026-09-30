@@ -1,0 +1,17 @@
+@page
+@model MultiIdpApp.Pages.ProfileModel
+@{
+    ViewData["Title"] = "Authenticated session";
+}
+<section class="panel">
+    <p class="eyebrow">Authenticated session</p>
+    <h1>@Model.DisplayName</h1>
+    <dl>
+        <dt>Identity source</dt><dd>@Model.IdentitySource</dd>
+        <dt>Email claim</dt><dd>@Model.Email</dd>
+        <dt>Tenant claim</dt><dd class="mono">@Model.TenantId</dd>
+        <dt>Subject claim</dt><dd class="mono">@Model.Subject</dd>
+    </dl>
+    <p class="muted">These values belong to your current session. Never publish real account screenshots or raw tokens.</p>
+</section>
+<aside class="note">Authentication is not authorization to a business benefit or resource. This page does not call a directory or an eligibility database.</aside>

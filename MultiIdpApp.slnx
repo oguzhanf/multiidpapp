@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MultiIdpApp/MultiIdpApp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MultiIdpApp.Tests/MultiIdpApp.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,20 @@
+@page
+@model MultiIdpApp.Pages.SignInModel
+@{
+    ViewData["Title"] = "Sign in";
+}
+<section class="panel narrow">
+    <p class="eyebrow">Select an identity provider</p>
+    <h1>Sign in</h1>
+    <form method="post" novalidate>
+        <label for="email">Email address</label>
+        <input id="email" asp-for="Email" type="email" autocomplete="username"
+               inputmode="email" maxlength="254" placeholder="user@example.com" required autofocus />
+        @if (Model.ErrorMessage is not null)
+        {
+            <p class="error" role="alert">@Model.ErrorMessage</p>
+        }
+        <button type="submit">Continue</button>
+    </form>
+    <p class="muted">A configured Workforce domain uses Workforce sign-in. Other domains use External ID.</p>
+</section>

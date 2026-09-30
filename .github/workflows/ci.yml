@@ -1,0 +1,24 @@
+name: Build and verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore locked public packages
+        run: dotnet restore MultiIdpApp.slnx --configfile NuGet.Config --locked-mode
+      - name: Build
+        run: dotnet build MultiIdpApp.slnx -c Release --no-restore
+      - name: Focused identity tests
+        run: dotnet run --project tests/MultiIdpApp.Tests/MultiIdpApp.Tests.csproj -c Release --no-build --no-restore

@@ -1,0 +1,11 @@
+@page
+@model MultiIdpApp.Pages.ErrorModel
+@{
+    ViewData["Title"] = "Request failed";
+}
+<section class="panel">
+    <h1>The request could not be completed.</h1>
+    <p>Retry from a fresh sign-in page. If the issue continues, provide the request ID to your administrator.</p>
+    <p class="mono">Request ID: @Model.RequestId</p>
+    <a class="button" asp-page="/SignIn">Return to sign-in</a>
+</section>

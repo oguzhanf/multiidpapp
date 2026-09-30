@@ -1,0 +1,18 @@
+@page
+@{
+    ViewData["Title"] = "Two identity providers, one application";
+}
+<section class="hero">
+    <p class="eyebrow">ASP.NET Core + Microsoft Entra</p>
+    <h1>Two identity providers.<br />One application.</h1>
+    <p>Workforce accounts and External ID customer accounts authenticate independently to one web app.</p>
+    <a class="button" asp-page="@(User.Identity?.IsAuthenticated == true ? "/Profile" : "/SignIn")">
+        @(User.Identity?.IsAuthenticated == true ? "View session" : "Try sign-in")
+    </a>
+</section>
+<section class="cards" aria-label="How the sample works">
+    <article><h2>Choose an authority</h2><p>The entered email domain selects a named OIDC scheme without a directory lookup.</p></article>
+    <article><h2>Validate independently</h2><p>Separate registrations, callbacks and cookies keep the two identity tenants distinct.</p></article>
+    <article><h2>Normalize claims</h2><p>The authenticated session includes a trusted identity source, tenant and subject.</p></article>
+</section>
+<aside class="note">This sample demonstrates authentication. Application-specific permissions and eligibility require their own implementation.</aside>
