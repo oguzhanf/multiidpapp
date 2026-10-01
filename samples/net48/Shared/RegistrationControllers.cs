@@ -16,6 +16,7 @@ namespace MultiIdp.Net48
     public static class RegistrationSignInPolicy
     {
         public const string TokenProperty = "registration_token";
+        public const string InvitationIdProperty = "registration_id";
         public const string PendingClaim = "registration_only";
 
         // The caller has already validated JWT signature, protocol nonce and lifetime.
@@ -29,15 +30,24 @@ namespace MultiIdp.Net48
             Guid tid, oid;
             if (!Guid.TryParse(AdmissionPolicy.Single(principal, "tid"), out tid) || !RegistrationPolicy.SameGuid(tid.ToString(), tenant.TenantId) || !Guid.TryParse(AdmissionPolicy.Single(principal, "oid"), out oid) || oid == Guid.Empty)
                 throw new SecurityTokenValidationException("Unexpected tenant or missing stable object identifier.");
-            foreach (var claim in identity.Claims.Where(c => c.Type == "identity_source" || c.Type == "subject_key" || c.Type == PendingClaim || c.Type == TokenProperty).ToArray()) identity.RemoveClaim(claim);
+            foreach (var claim in identity.Claims.Where(c => c.Type == "identity_source" || c.Type == "subject_key" || c.Type == PendingClaim || c.Type == TokenProperty || c.Type == InvitationIdProperty).ToArray()) identity.RemoveClaim(claim);
             identity.AddClaim(new Claim("identity_source", source));
             identity.AddClaim(new Claim("subject_key", tid.ToString() + ":" + oid.ToString()));
             if (AdmissionPolicy.Evaluate(config, principal, entries, now).Allowed) return;
-            string token;
-            if (invitations == null || properties == null || !properties.Dictionary.TryGetValue(TokenProperty, out token))
+            if (invitations == null || properties == null)
                 throw new SecurityTokenValidationException("Application entitlement or signed persona role denied.");
             InvitationRecord invitation;
-            try { invitation = invitations.Preview(config, token, now); }
+            try {
+                string token;
+                // A supplied bearer link must pass its own checks; never fall back from a bad link.
+                if (properties.Dictionary.TryGetValue(TokenProperty, out token)) {
+                    invitation = invitations.Preview(config, token, now);
+                    properties.Dictionary.Remove(InvitationIdProperty);
+                } else {
+                    invitation = invitations.PreviewForRecipient(config, principal, now);
+                    properties.Dictionary[InvitationIdProperty] = invitation.Id;
+                }
+            }
             catch (Exception ex) when (ex is RegistrationException || ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
             { throw new SecurityTokenValidationException("The registration invitation is unavailable."); }
             if (!MatchesBoundIdentity(config, invitation, principal, now)) throw new SecurityTokenValidationException("The signed identity does not match this registration invitation.");
@@ -208,7 +218,10 @@ namespace MultiIdp.Net48
             {
                 var completion = await ReadCompletion();
                 var currentRoles = await RegistrationRuntime.CurrentSponsorRolesAsync(Startup.Config, completion.Invitation);
-                RegistrationRuntime.Store(Startup.Config).Redeem(Startup.Config, completion.Token, completion.Principal, RegistrationRuntime.ReadEntitlements(Startup.Config), currentRoles, DateTimeOffset.UtcNow);
+                var store = RegistrationRuntime.Store(Startup.Config);
+                var entries = RegistrationRuntime.ReadEntitlements(Startup.Config);
+                if (completion.Token != null) store.Redeem(Startup.Config, completion.Token, completion.Principal, entries, currentRoles, DateTimeOffset.UtcNow);
+                else store.RedeemForRecipient(Startup.Config, completion.Invitation.Id, completion.Principal, entries, currentRoles, DateTimeOffset.UtcNow);
                 // A new normal sign-in removes the restricted cookie and its invitation property.
                 HttpContext.GetOwinContext().Authentication.SignOut(Startup.CookieScheme);
                 return Redirect("/?registration=complete");
@@ -220,11 +233,17 @@ namespace MultiIdp.Net48
         private async Task<CompletionContext> ReadCompletion()
         {
             var ticket = await HttpContext.GetOwinContext().Authentication.AuthenticateAsync(Startup.CookieScheme);
-            string token;
-            if (ticket?.Identity?.IsAuthenticated != true || ticket.Properties == null || !ticket.Properties.Dictionary.TryGetValue(RegistrationSignInPolicy.TokenProperty, out token))
+            if (ticket?.Identity?.IsAuthenticated != true || ticket.Properties == null)
                 throw new RegistrationException("An authenticated invitation session is required.");
-            var invitation = RegistrationRuntime.Store(Startup.Config).Preview(Startup.Config, token, DateTimeOffset.UtcNow);
             var principal = new ClaimsPrincipal(ticket.Identity);
+            var store = RegistrationRuntime.Store(Startup.Config);
+            string token, invitationId;
+            InvitationRecord invitation;
+            if (ticket.Properties.Dictionary.TryGetValue(RegistrationSignInPolicy.TokenProperty, out token))
+                invitation = store.Preview(Startup.Config, token, DateTimeOffset.UtcNow);
+            else if (RegistrationSignInPolicy.IsRegistrationOnly(principal) && ticket.Properties.Dictionary.TryGetValue(RegistrationSignInPolicy.InvitationIdProperty, out invitationId))
+                invitation = store.PreviewForRecipient(Startup.Config, principal, DateTimeOffset.UtcNow, invitationId);
+            else throw new RegistrationException("An authenticated invitation session is required.");
             if (!RegistrationSignInPolicy.MatchesBoundIdentity(Startup.Config, invitation, principal, DateTimeOffset.UtcNow)) throw new RegistrationException("The signed-in account does not match this invitation.");
             return new CompletionContext { Token = token, Invitation = invitation, Principal = principal };
         }

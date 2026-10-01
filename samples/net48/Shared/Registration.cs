@@ -200,13 +200,32 @@ namespace MultiIdp.Net48
             var invitation = Find(state, token).Invitation; RequireCurrent(config, invitation, now, true); return Copy(invitation);
         }, false);
 
+        // Resume only a delivered invitation for the exact validated directory identity.
+        // Email addresses and the invitation ID alone are never identity proof.
+        public InvitationRecord PreviewForRecipient(AppConfiguration config, ClaimsPrincipal recipient, DateTimeOffset now, string invitationId = null) => Transaction(state => {
+            var invitation = FindForRecipient(state, config, recipient, now, invitationId);
+            return Copy(invitation);
+        }, false);
+
         // Caller must expose this only as an authenticated, CSRF-protected POST.
         public Entitlement Redeem(AppConfiguration config, string token, ClaimsPrincipal recipient, IEnumerable<Entitlement> entries, IEnumerable<string> currentSponsorRoles, DateTimeOffset now)
         {
             var governance = (entries ?? new Entitlement[0]).Where(e => e != null).ToArray();
-            return Transaction(state => {
-                var invitation = Find(state, token).Invitation; RequireCurrent(config, invitation, now, true);
-                if (recipient?.Identity?.IsAuthenticated != true || !RegistrationPolicy.SameGuid(AdmissionPolicy.Single(recipient, "tid"), invitation.TenantId) || !RegistrationPolicy.SameGuid(AdmissionPolicy.Single(recipient, "oid"), invitation.ObjectId) || AdmissionPolicy.Single(recipient, "identity_source") != invitation.Source)
+            return Transaction(state => RedeemBound(state, config, Find(state, token).Invitation, recipient, governance, currentSponsorRoles, now), true);
+        }
+
+        // Used only with the invitation ID held in a protected registration-only cookie.
+        public Entitlement RedeemForRecipient(AppConfiguration config, string invitationId, ClaimsPrincipal recipient, IEnumerable<Entitlement> entries, IEnumerable<string> currentSponsorRoles, DateTimeOffset now)
+        {
+            if (string.IsNullOrEmpty(invitationId)) throw new RegistrationException("An authenticated invitation session is required.");
+            var governance = (entries ?? new Entitlement[0]).Where(e => e != null).ToArray();
+            return Transaction(state => RedeemBound(state, config, FindForRecipient(state, config, recipient, now, invitationId), recipient, governance, currentSponsorRoles, now), true);
+        }
+
+        private static Entitlement RedeemBound(RegistrationState state, AppConfiguration config, InvitationRecord invitation, ClaimsPrincipal recipient, Entitlement[] governance, IEnumerable<string> currentSponsorRoles, DateTimeOffset now)
+        {
+                RequireCurrent(config, invitation, now, true);
+                if (!RegistrationSignInPolicy.MatchesBoundIdentity(config, invitation, recipient, now))
                     throw new RegistrationException("Sign in with the directory identity bound to this invitation.");
                 var sponsor = RegistrationPolicy.RecheckSponsor(config, invitation, governance, currentSponsorRoles, now);
                 if (!sponsor.Allowed) throw new RegistrationException(sponsor.Reason);
@@ -224,7 +243,6 @@ namespace MultiIdp.Net48
                 // One JSON replacement commits both state transitions. No approval is written before proof.
                 state.Approvals.Add(approval); invitation.Status = "redeemed"; invitation.RedeemedUtc = now;
                 return Copy(approval);
-            }, true);
         }
 
         // Include disabled records too: removal/disable/expiry must remain effective during admission.
@@ -331,6 +349,18 @@ namespace MultiIdp.Net48
                 throw new RegistrationException("The invitation link is invalid.");
             var hash = Hash(token); var matches = state.Invitations.Where(i => EqualHash(i.TokenHash, hash)).ToArray();
             if (matches.Length != 1) throw new RegistrationException("The invitation link is invalid.");
+            return matches[0];
+        }
+        private static InvitationRecord FindForRecipient(RegistrationState state, AppConfiguration config, ClaimsPrincipal recipient, DateTimeOffset now, string invitationId)
+        {
+            Guid id;
+            if (invitationId != null && (!Guid.TryParse(invitationId, out id) || id == Guid.Empty))
+                throw new RegistrationException("The registration invitation is unavailable.");
+            var matches = state.Invitations.Select(i => i.Invitation).Where(i =>
+                (invitationId == null || i.Id == invitationId) && i.EmailStatus == "sent" &&
+                RegistrationSignInPolicy.MatchesBoundIdentity(config, i, recipient, now)).ToArray();
+            if (matches.Length != 1) throw new RegistrationException("A unique current invitation for this directory identity is required.");
+            RequireCurrent(config, matches[0], now, true);
             return matches[0];
         }
         private static string Hash(string token) { using (var digest = SHA256.Create()) return Convert.ToBase64String(digest.ComputeHash(Encoding.UTF8.GetBytes(token))); }

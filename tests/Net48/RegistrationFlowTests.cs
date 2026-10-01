@@ -18,8 +18,78 @@ internal static class RegistrationFlowTests
 
     internal static void Run(Action<string, Func<bool>> check)
     {
-        check("registration callback denies pending recipient without protected invite", () => {
+        check("registration callback denies unsent pending recipient without protected invite", () => {
             using (var f = new Fixture()) return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now));
+        });
+        check("ordinary dependent sign-in resumes only restricted sent registration", () => {
+            using (var f = new Fixture()) {
+                f.Deliver(); var identity = f.Recipient(); var properties = new AuthenticationProperties();
+                RegistrationSignInPolicy.Validate(f.Config, identity, properties, "external", new[] { f.Parent }, f.Store, Now);
+                string invitationId;
+                return properties.Dictionary.TryGetValue(RegistrationSignInPolicy.InvitationIdProperty, out invitationId) && invitationId == f.Issue.Invitation.Id
+                    && !properties.Dictionary.ContainsKey(RegistrationSignInPolicy.TokenProperty)
+                    && RegistrationSignInPolicy.IsRegistrationOnly(new ClaimsPrincipal(identity)) && properties.RedirectUri == "/Registration/Complete"
+                    && properties.IsPersistent == false && properties.AllowRefresh == false && properties.ExpiresUtc <= Now.AddMinutes(20)
+                    && f.Store.ReadApprovedEntitlements().Length == 0
+                    && !RegistrationSignInPolicy.EvaluateApplicationAccess(f.Config, new ClaimsPrincipal(identity), new[] { f.Parent }, Now).Allowed;
+            }
+        });
+        check("ordinary dependent resume confirms once then requires fresh normal sign-in", () => {
+            using (var f = new Fixture()) {
+                f.Deliver(); var pending = f.Recipient(); var properties = new AuthenticationProperties();
+                RegistrationSignInPolicy.Validate(f.Config, pending, properties, "external", new[] { f.Parent }, f.Store, Now);
+                var approval = f.Store.RedeemForRecipient(f.Config, properties.Dictionary[RegistrationSignInPolicy.InvitationIdProperty], new ClaimsPrincipal(pending), new[] { f.Parent }, new[] { "Employee" }, Now);
+                var approved = new[] { f.Parent, approval };
+                if (RegistrationSignInPolicy.EvaluateApplicationAccess(f.Config, new ClaimsPrincipal(pending), approved, Now).Allowed || !StoreDenied(() => f.Store.Preview(f.Config, f.Issue.Token, Now))
+                    || !StoreDenied(() => f.Store.RedeemForRecipient(f.Config, f.Issue.Invitation.Id, new ClaimsPrincipal(pending), approved, new[] { "Employee" }, Now))) return false;
+                var normal = f.Recipient(); RegistrationSignInPolicy.Validate(f.Config, normal, new AuthenticationProperties(), "external", approved, f.Store, Now);
+                return !RegistrationSignInPolicy.IsRegistrationOnly(new ClaimsPrincipal(normal))
+                    && RegistrationSignInPolicy.EvaluateApplicationAccess(f.Config, new ClaimsPrincipal(normal), approved, Now).Allowed && f.Store.ReadApprovedEntitlements().Length == 1;
+            }
+        });
+        check("ordinary resume never substitutes for an invalid original invitation token", () => {
+            using (var f = new Fixture()) {
+                f.Deliver(); var properties = f.Properties(); properties.Dictionary[RegistrationSignInPolicy.TokenProperty] = new string('A', 43);
+                return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), properties, "external", new[] { f.Parent }, f.Store, Now)) && f.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        foreach (var claim in new[] { "oid", "tid", "iss", "aud", "roles" }) {
+            var changedClaim = claim;
+            check("ordinary resume rejects wrong signed " + changedClaim, () => {
+                using (var f = new Fixture()) {
+                    f.Deliver(); var identity = f.Recipient(); ReplaceClaim(identity, changedClaim, changedClaim == "roles" ? "External" : changedClaim == "iss" ? "https://attacker.test/v2.0" : SponsorId);
+                    return Denied(() => RegistrationSignInPolicy.Validate(f.Config, identity, new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now)) && f.Store.ReadApprovedEntitlements().Length == 0;
+                }
+            });
+        }
+        check("ordinary resume cannot authenticate external invite through workforce provider", () => {
+            using (var f = new Fixture()) { f.Deliver(); return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "workforce", new[] { f.Parent }, f.Store, Now)); }
+        });
+        check("ordinary resume does not cross application boundaries", () => {
+            using (var f = new Fixture()) { f.Deliver(); f.Config.AppId = "sampleapp02"; return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now)); }
+        });
+        foreach (var status in new[] { "queued", "pending", "failed" }) {
+            var deliveryStatus = status;
+            check("ordinary resume rejects " + deliveryStatus + " invitation delivery", () => {
+                using (var f = new Fixture()) {
+                    f.Store.RecordDelivery(f.Config, f.Issue.Invitation.Id, deliveryStatus, SponsorId, Now);
+                    return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now));
+                }
+            });
+        }
+        check("ordinary resume rejects canceled invitation", () => {
+            using (var f = new Fixture()) { f.Store.CancelBeforeDelivery(f.Config, f.Issue.Invitation.Id, Now); return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now)); }
+        });
+        check("ordinary resume rejects expired sent invitation", () => {
+            using (var f = new Fixture()) { f.Deliver(); return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now.AddHours(24))); }
+        });
+        check("ordinary resume rejects ambiguous sent invitations bound to one identity", () => {
+            using (var f = new Fixture()) {
+                f.Deliver(); var second = f.Store.Create(f.Config, new ClaimsPrincipal(f.Employee()), new[] { f.Parent }, RegistrationKind.Dependent, "other@personal.test", Now, Now.AddDays(5));
+                f.Store.BindIdentity(f.Config, second.Invitation.Id, new InvitationIdentityBinding { TenantId = External, ObjectId = RecipientId }, Now);
+                f.Store.RecordDelivery(f.Config, second.Invitation.Id, "sent", RecipientId, Now);
+                return Denied(() => RegistrationSignInPolicy.Validate(f.Config, f.Recipient(), new AuthenticationProperties(), "external", new[] { f.Parent }, f.Store, Now)) && f.Store.ReadApprovedEntitlements().Length == 0;
+            }
         });
         check("registration callback valid invitation allows narrowly scoped cookie", () => {
             using (var f = new Fixture()) {
@@ -68,6 +138,8 @@ internal static class RegistrationFlowTests
         });
     }
     private static bool Denied(Action action) { try { action(); return false; } catch (Microsoft.IdentityModel.Tokens.SecurityTokenValidationException) { return true; } }
+    private static bool StoreDenied(Action action) { try { action(); return false; } catch (RegistrationException) { return true; } }
+    private static void ReplaceClaim(ClaimsIdentity identity, string type, string value) { foreach (var claim in identity.FindAll(type).ToArray()) identity.RemoveClaim(claim); identity.AddClaim(new Claim(type, value)); }
     private sealed class Fixture : IDisposable
     {
         private readonly string directory = Path.Combine(Path.GetTempPath(), "net48-registration-flow-" + Guid.NewGuid());
@@ -86,6 +158,7 @@ internal static class RegistrationFlowTests
             Store.BindIdentity(Config, Issue.Invitation.Id, new InvitationIdentityBinding { TenantId = External, ObjectId = RecipientId }, Now);
         }
         internal AuthenticationProperties Properties() { var properties = new AuthenticationProperties(); properties.Dictionary["registration_token"] = Issue.Token; return properties; }
+        internal void Deliver() => Store.RecordDelivery(Config, Issue.Invitation.Id, "sent", SponsorId, Now);
         internal ClaimsIdentity Recipient() => Identity(External, RecipientId, Config.External, "Dependent");
         internal ClaimsIdentity Employee() { var identity = Identity(Workforce, SponsorId, Config.Workforce, "Employee"); identity.AddClaim(new Claim("identity_source", "workforce")); return identity; }
         private static ClaimsIdentity Identity(string tenant, string oid, TenantConfiguration config, string role) => new ClaimsIdentity(new[] { new Claim("tid", tenant), new Claim("oid", oid), new Claim("iss", config.Issuer), new Claim("aud", config.ClientId), new Claim("roles", role) }, "validated-token");

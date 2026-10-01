@@ -85,6 +85,148 @@ internal static class RegistrationTests
                 return entitlement.Persona == "dependent" && fixture.Store.ReadApprovedEntitlements().Length == 1;
             }
         });
+        check("recipient preview matches signed identity without exposing invitation token", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent(); var before = File.ReadAllText(fixture.Path);
+                var preview = fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now);
+                preview.RecipientEmail = "changed@attacker.test";
+                var bound = fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now, issue.Invitation.Id);
+                return bound.Id == issue.Invitation.Id && bound.RecipientEmail == "child@personal.test"
+                    && fixture.Store.ReadApprovedEntitlements().Length == 0 && File.ReadAllText(fixture.Path) == before && !before.Contains(issue.Token);
+            }
+        });
+        check("recipient preview rejects absent wrong app and unknown invitation id", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent();
+                return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, Principal(fixture.Config, External, OtherId, "external", "Dependent"), Now))
+                    && Denied(() => fixture.Store.PreviewForRecipient(Config("sampleapp02"), fixture.Recipient(), Now))
+                    && Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now, OtherId))
+                    && Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now.AddHours(24), issue.Invitation.Id));
+            }
+        });
+        foreach (var claim in new[] { "tid", "oid", "identity_source", "iss", "aud", "roles" }) {
+            var changedClaim = claim;
+            check("recipient preview and redemption reject wrong signed " + changedClaim, () => {
+                using (var fixture = new Fixture()) {
+                    var issue = fixture.Sent(); var recipient = fixture.Recipient();
+                    ReplaceClaim(recipient, changedClaim, changedClaim == "identity_source" ? "workforce" : changedClaim == "roles" ? "External" : changedClaim == "iss" ? "https://attacker.test/v2.0" : OtherId);
+                    return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, recipient, Now, issue.Invitation.Id))
+                        && Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, recipient, new[] { fixture.Parent }, new[] { "Employee" }, Now))
+                        && fixture.Store.ReadApprovedEntitlements().Length == 0 && fixture.Store.Preview(fixture.Config, issue.Token, Now).Status == "ready";
+                }
+            });
+        }
+        check("recipient preview rejects duplicate signed identity claims", () => {
+            using (var fixture = new Fixture()) {
+                fixture.Sent(); var recipient = fixture.Recipient(); recipient.Identities.First().AddClaim(new Claim("oid", RecipientId));
+                return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, recipient, Now));
+            }
+        });
+        check("recipient preview denies unsigned identity and email-only identity match", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent(); var wrong = Principal(fixture.Config, External, OtherId, "external", "Dependent"); wrong.Identities.First().AddClaim(new Claim("email", issue.Invitation.RecipientEmail));
+                return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, wrong, Now))
+                    && Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, new ClaimsPrincipal(new ClaimsIdentity(fixture.Recipient().Claims)), Now));
+            }
+        });
+        check("recipient preview refuses ambiguous current invitations for one directory identity", () => {
+            using (var fixture = new Fixture()) {
+                fixture.Sent(); fixture.Sent("another@personal.test");
+                return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now)) && fixture.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        foreach (var status in new[] { "not_sent", "queued", "pending", "failed" }) {
+            var deliveryStatus = status;
+            check("recipient preview and redemption reject " + deliveryStatus + " invitation delivery", () => {
+                using (var fixture = new Fixture()) {
+                    var issue = fixture.Ready();
+                    if (deliveryStatus != "not_sent") fixture.Store.RecordDelivery(fixture.Config, issue.Invitation.Id, deliveryStatus, OtherId, Now);
+                    return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now, issue.Invitation.Id))
+                        && Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now))
+                        && fixture.Store.ReadApprovedEntitlements().Length == 0;
+                }
+            });
+        }
+        check("recipient preview ignores canceled invitation rather than reactivating it", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Ready(); fixture.Store.CancelBeforeDelivery(fixture.Config, issue.Invitation.Id, Now);
+                return Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now, issue.Invitation.Id));
+            }
+        });
+        check("recipient redemption is exact app scoped and cannot select another invitation id", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent();
+                return Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, OtherId, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now))
+                    && Denied(() => fixture.Store.RedeemForRecipient(Config("sampleapp02"), issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee", "admin" }, Now))
+                    && fixture.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        check("recipient redemption does not overwrite a revoked application approval", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent(); var revoked = new Entitlement { AppId = fixture.Config.AppId, TenantId = External, ObjectId = RecipientId, Source = "external", Persona = "dependent", Status = "disabled" };
+                return Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent, revoked }, new[] { "Employee" }, Now))
+                    && fixture.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        check("recipient redemption rechecks current sponsor approval and directory roles", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent(); fixture.Parent.Status = "disabled";
+                if (!Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now))) return false;
+                fixture.Parent.Status = "approved";
+                return Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "admin" }, Now))
+                    && fixture.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        check("recipient app02 redemption requires current registration privilege", () => {
+            using (var fixture = new Fixture("sampleapp02")) {
+                var issue = fixture.Sent();
+                return Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now))
+                    && fixture.Store.ReadApprovedEntitlements().Length == 0;
+            }
+        });
+        check("recipient app02 personal business registration retains External persona", () => {
+            using (var fixture = new Fixture("sampleapp02", RegistrationKind.ExternalBusiness)) {
+                var issue = fixture.Sent(); var recipient = fixture.Recipient();
+                var preview = fixture.Store.PreviewForRecipient(fixture.Config, recipient, Now);
+                var approval = fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, recipient, new[] { fixture.Parent }, new[] { "Employee", "admin" }, Now);
+                return preview.Persona == "external" && approval.Persona == "external" && approval.Source == "external"
+                    && AdmissionPolicy.Evaluate(fixture.Config, recipient, new[] { fixture.Parent, approval }, Now).Allowed;
+            }
+        });
+        check("recipient organizational resume retains signed verified home issuer check", () => {
+            using (var fixture = new Fixture("sampleapp02", RegistrationKind.OrganizationalPartner)) {
+                var issue = fixture.Sent(); var recipient = fixture.Recipient();
+                if (!Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, recipient, Now))) return false;
+                recipient.Identities.First().AddClaim(new Claim("idp", "live.com"));
+                if (!Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, recipient, new[] { fixture.Parent }, new[] { "Employee", "admin" }, Now))) return false;
+                ReplaceClaim(recipient, "idp", "https://sts.windows.net/" + HomeTenant + "/");
+                var preview = fixture.Store.PreviewForRecipient(fixture.Config, recipient, Now);
+                var approval = fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, recipient, new[] { fixture.Parent }, new[] { "Employee", "admin" }, Now);
+                return preview.Persona == "partner" && approval.HomeTenantId == HomeTenant
+                    && AdmissionPolicy.Evaluate(fixture.Config, recipient, new[] { fixture.Parent, approval }, Now).Allowed;
+            }
+        });
+        check("recipient redemption and original bearer link share one-use approval commit", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent(); var child = fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now);
+                return child.LinkedEmployeeTenantId == Workforce && child.LinkedEmployeeObjectId == SponsorId && child.RelationshipVerified && child.BenefitEligible
+                    && Denied(() => fixture.Redeem(issue.Token))
+                    && Denied(() => fixture.Store.PreviewForRecipient(fixture.Config, fixture.Recipient(), Now, issue.Invitation.Id))
+                    && Denied(() => fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now))
+                    && fixture.Store.ReadApprovedEntitlements().Length == 1;
+            }
+        });
+        check("concurrent recipient redemption creates exactly one application approval", () => {
+            using (var fixture = new Fixture()) {
+                var issue = fixture.Sent();
+                var attempts = Enumerable.Range(0, 8).Select(_ => Task.Run(() => {
+                    try { fixture.Store.RedeemForRecipient(fixture.Config, issue.Invitation.Id, fixture.Recipient(), new[] { fixture.Parent }, new[] { "Employee" }, Now); return true; }
+                    catch (RegistrationException) { return false; }
+                })).ToArray();
+                Task.WaitAll(attempts);
+                return attempts.Count(t => t.Result) == 1 && fixture.Store.ReadApprovedEntitlements().Length == 1;
+            }
+        });
         check("registration invitation token tampering rejected", () => {
             using (var fixture = new Fixture()) { var issue = fixture.Ready(); var altered = (issue.Token[0] == 'A' ? "B" : "A") + issue.Token.Substring(1); return Denied(() => fixture.Redeem(altered)); }
         });
@@ -322,6 +464,7 @@ internal static class RegistrationTests
         return RegistrationPolicy.Authorize(config, Sponsor(config, roles), new[] { parent }, kind, Now).Allowed;
     }
     private static bool Denied(Action action) { try { action(); return false; } catch (RegistrationException) { return true; } }
+    private static void ReplaceClaim(ClaimsPrincipal principal, string type, string value) { var identity = principal.Identities.First(); foreach (var claim in identity.FindAll(type).ToArray()) identity.RemoveClaim(claim); identity.AddClaim(new Claim(type, value)); }
     private static AppConfiguration Config(string app) => new AppConfiguration {
         AppId = app, EmployeeDomains = new[] { "employee.test" }, ApprovedPartnerDomains = new[] { "partner.test" },
         Workforce = new TenantConfiguration { TenantId = Workforce, ClientId = "66666666-6666-6666-6666-666666666666", Issuer = "https://login.microsoftonline.com/" + Workforce + "/v2.0" },
@@ -351,6 +494,7 @@ internal static class RegistrationTests
         internal IssuedInvitation Create(string email = null, DateTimeOffset? limit = null) => Store.Create(Config, Sponsor(Config), new[] { Parent }, Kind, email ?? (Kind == RegistrationKind.OrganizationalPartner ? "user@partner.test" : "child@personal.test"), Now, limit ?? Now.AddDays(20));
         internal InvitationIdentityBinding Binding() => new InvitationIdentityBinding { TenantId = Kind == RegistrationKind.OrganizationalPartner ? Workforce : External, ObjectId = RecipientId, HomeTenantId = Kind == RegistrationKind.OrganizationalPartner ? HomeTenant : null, OrganizationVerifiedUtc = Kind == RegistrationKind.OrganizationalPartner ? (DateTimeOffset?)Now.AddMinutes(-1) : null };
         internal IssuedInvitation Ready(string email = null) { var issue = Create(email); Store.BindIdentity(Config, issue.Invitation.Id, Binding(), Now); return issue; }
+        internal IssuedInvitation Sent(string email = null) { var issue = Ready(email); Store.RecordDelivery(Config, issue.Invitation.Id, "sent", OtherId, Now); return issue; }
         internal ClaimsPrincipal Recipient() => Principal(Config, Kind == RegistrationKind.OrganizationalPartner ? Workforce : External, RecipientId, Kind == RegistrationKind.OrganizationalPartner ? "workforce" : "external", Kind == RegistrationKind.Dependent ? "Dependent" : Kind == RegistrationKind.ExternalBusiness ? "External" : "Partner");
         internal Entitlement Redeem(string token, ClaimsPrincipal recipient = null) => Store.Redeem(Config, token, recipient ?? Recipient(), new[] { Parent }, new[] { "Employee", "admin" }, Now);
         public void Dispose() => Directory.Delete(directory, true);

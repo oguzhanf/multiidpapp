@@ -46,6 +46,14 @@ The invitation opens **Verify email and create password**, then the Microsoft em
 
 Email delivery, email verification and business approval are three separate results. A provider-accepted send or generated link is insufficient evidence that the recipient received the email and completed registration. Do not automatically resend an operation whose delivery outcome is uncertain.
 
+### Resume registration from ordinary sign-in
+
+A recipient who has set their password but has not confirmed registration can sign in from the app's home page. After normal token validation, the app resumes registration only when there is exactly one current, bound, `ready` invitation with `emailStatus=sent` for that app. The signed tenant/object ID, identity source, issuer, audience and required target-app role must match the invitation; organizational partners must also present the expected signed home issuer. An email match alone is insufficient.
+
+The protected application cookie holds the invitation ID and `registration_only` restriction, expires within 20 minutes or sooner at invitation expiry, and redirects to `/Registration/Complete`. It grants no benefit or other protected application access. **Confirm registration** remains a CSRF-protected POST that rechecks the invitation, current sponsor roles and approval before atomically consuming it and recording the recipient's approval. The recipient must then complete a fresh ordinary sign-in for application access.
+
+Missing, duplicate, expired, canceled or unsent invitations cannot resume. When the sign-in explicitly carries an original invitation token, that token must be valid; a failed token never falls back to invitation lookup. The original emailed invitation and password-setup flow are unchanged.
+
 The sponsor's **Invite someone** page shows only that sponsor's masked invitation statuses. **Cancel unsent invitation** is available only for a `pending_identity` or bound `ready` record with `emailStatus=not_sent` and no email operation ID. Its CSRF-protected POST refreshes current sponsor roles/approval and atomically rechecks those conditions. Cancellation preserves the record/hash/audit and creates no approval; it does not delete a customer or undo directory assignments. The server can also safely cancel a directory-only failure before any delivery attempt. Once an operation is queued, submitted or uncertain, do not cancel or automatically resend it: the operation ID and queued status are persisted before ACS submission.
 
 For dependents, the approval records the sponsor's stable workforce tenant/object IDs as the linked employee. Admission requires that same-app employee approval to remain unique, current and benefit-eligible. The relationship confirmation is a PoC attestation; the production source of relationship and benefit evidence still needs customer agreement.
@@ -69,6 +77,7 @@ Use synthetic business data and privately approved recipients. Record these chec
 - App01 Employee can invite a dependent; app02 Employee alone cannot; app02 `dependentRegistrant` can invite a dependent but cannot use the business section; app02 `admin` can use both. Partner/external identities cannot send invitations.
 - The intended recipient receives the email and completes Microsoft-controlled account setup without receiving a password from the application.
 - Wrong identity, wrong app, expired link, second redemption, forged/absent CSRF token and revoked sponsor/capability all fail. Concurrent redemption grants approval once.
+- Ordinary sign-in resumes only a unique current, sent invitation for the exact validated identity and required role. The registration-only session cannot access benefits; confirmation consumes the invitation, and fresh sign-in is required. Invalid explicit tokens, duplicate invitations and unsent invitations fail.
 - The new dependent enters only the approved app and loses access when the eligible linked employee expires or is revoked. The organizational partner presents the expected signed home issuer and enters app02 only.
 - Every hosted driver URL, asset, catalog, manifest and source download requires the configured Caldova operator sign-in and object-ID allowlist. This separate EasyAuth boundary does not replace the demo apps' own authentication or capabilities. An offline driver copy remains local.
 
