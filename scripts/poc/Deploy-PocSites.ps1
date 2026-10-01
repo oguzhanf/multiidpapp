@@ -68,6 +68,7 @@ foreach ($appId in @('sampleapp01','sampleapp02')) {
 }
 $driver = Join-Path $stageRoot 'driver'
 New-Item -ItemType Directory -Path "$driver\source" -Force | Out-Null
+Copy-Item -LiteralPath "$repoRoot\docs\poc\SAMPLEAPP01-IMPLEMENTATION-HANDOFF.md" -Destination "$driver\source\SAMPLEAPP01-IMPLEMENTATION-HANDOFF.md"
 Copy-Item -LiteralPath "$repoRoot\driver\index.html","$repoRoot\driver\site.css","$repoRoot\driver\site.js","$repoRoot\driver\code-samples.js","$repoRoot\driver\web.config","$repoRoot\driver\migration-sampleapp01.html","$repoRoot\driver\migration.css" -Destination $driver
 $driverHtml = [IO.File]::ReadAllText((Join-Path $driver 'index.html'))
 foreach ($asset in @('site.css','site.js','code-samples.js')) {
