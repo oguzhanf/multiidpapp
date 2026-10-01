@@ -51,7 +51,8 @@
               <tr><td>Project / NuGet</td><td>Add compatible OWIN, MSAL and token validation libraries.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FDirectory.Build.props">Directory.Build.props</a></td></tr>
               <tr><td>Startup / Startup.Auth</td><td>Two tenant-specific providers, one application cookie.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs</a></td></tr>
               <tr><td>Configuration / IIS</td><td>Separate clients, callbacks, secrets and private storage.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FConfiguration.cs">Configuration.cs</a></td></tr>
-              <tr><td>Login page / controller</td><td>Route email hint and challenge the selected provider.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FControllers.cs">Controllers.cs</a></td></tr>
+              <tr><td>Login page / controller</td><td>Await the exact workforce UPN lookup, then challenge the selected provider.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FControllers.cs">Controllers.cs</a></td></tr>
+              <tr><td>Workforce directory adapter</td><td>Distinguish an exact UPN match, confirmed absence and lookup failure.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FWorkforceAccountResolver.cs">WorkforceAccountResolver.cs</a></td></tr>
               <tr><td>User lookup / access checks</td><td>Map stable directory IDs and enforce current app approval.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs</a></td></tr>
               <tr><td>Employee registration screens</td><td>Invite, provision, verify email, create password and confirm.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs</a></td></tr>
             </tbody>
@@ -70,7 +71,7 @@
               <tr><td><code>Newtonsoft.Json</code>; <code>Microsoft.AspNet.Mvc</code> for sample controllers</td><td>13.0.4; 5.3.0</td></tr>
             </tbody>
           </table></div>
-          <p>Set <code>Startup.AppId</code> to <code>"sampleapp01"</code>. If copying the shared source unchanged, add <code>SAMPLEAPP01</code> to the project's compilation constants; otherwise its conditional compilation selects Sampleapp02.</p>
+          <p>Set <code>Startup.AppId</code> to <code>"sampleapp01"</code>. If copying the shared source unchanged, add <code>SAMPLEAPP01</code> to the project's compilation constants so conditional compilation selects this application's identity and policy.</p>
           <p class="source-note">This sample uses Katana with an explicit MSAL adapter. Microsoft also provides <a href="https://learn.microsoft.com/en-us/entra/msidweb/frameworks/owin">Microsoft.Identity.Web.OWIN</a> for Framework applications. Using that alternative requires its own dual-provider adaptation and verification.</p>
         </section>
 
@@ -82,12 +83,16 @@
             <li>External callback: <code>https://&lt;application-host&gt;/signin-external</code>.</li>
             <li>Each client uses its own credential and tenant-specific issuer. Web login uses authorization code with PKCE.</li>
           </ul>
-          <p>Sampleapp01 admits employees and approved customer personas. Organizational partner B2B belongs to Sampleapp02.</p>
+          <p>Sampleapp01 admits employees and approved personal customer personas through its two tenant-specific providers.</p>
         </section>
 
         <section id="configuration" aria-labelledby="configuration-title">
           <h3 id="configuration-title">03 · Server configuration</h3>
-          <p><code>ConfigurationLoader.Load("sampleapp01")</code> reads <code>MULTIIDP_SAMPLEAPP01_CONFIG</code>: an absolute protected JSON path containing employee domains, both tenant/client IDs, exact issuers, callbacks and the entitlement path. Obtain each issuer from that tenant's discovery metadata.</p>
+          <p><code>ConfigurationLoader.Load("sampleapp01")</code> reads <code>MULTIIDP_SAMPLEAPP01_CONFIG</code>: an absolute protected JSON path containing both tenant/client IDs, exact issuers, callbacks and the entitlement path. Obtain each issuer from that tenant's discovery metadata.</p>
+          <h4>Automatic workforce account lookup</h4>
+          <p><code>RegistrationRuntime.RouteAsync</code> uses <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FWorkforceAccountResolver.cs"><code>WorkforceAccountResolver.ResolveAsync</code></a> to query Microsoft Graph in the configured workforce tenant for the exact entered UPN. An existing account selects workforce; only confirmed absence selects External ID. Lookup errors, timeouts or missing permissions stop the request with HTTP 503. A found disabled account or Guest stays on the workforce route; directory sign-in and application approval still decide access.</p>
+          <p>The same lookup covers <code>employee@company.example</code>, <code>employee@subsidiary.example</code> and <code>employee@tenant.onmicrosoft.com</code> when those are real workforce UPNs. All use one workforce authority, client and <code>/signin-workforce</code> callback. There is no employee-domain list to maintain, even with 100 suffixes. The shared schema's legacy <code>employeeDomains</code> property can be empty and does not decide this first-stage Sampleapp01 route.</p>
+          <p>Require the actual UPN. SMTP aliases are not automatically resolved; accepting an alternate email needs a separately implemented and tested resolver even if the tenant supports alternate-email sign-in. An account lookup is routing input, never an access grant.</p>
           <p>Supply credentials only in the server environment: <code>MULTIIDP_SAMPLEAPP01_WORKFORCE_SECRET</code> and <code>MULTIIDP_SAMPLEAPP01_EXTERNAL_SECRET</code>. Registration has a separate <code>MULTIIDP_SAMPLEAPP01_REGISTRATION_CONFIG</code> and provisioner credential <code>MULTIIDP_REGISTRATION_EXTERNAL_SECRET</code>. Keep configuration in protected <code>App_Data</code> or outside the web root; durable invitation state stays outside deployment content.</p>
         </section>
 
@@ -113,21 +118,22 @@ var result = await client.AcquireTokenByAuthorizationCode(new string[0], request
 
         <section id="login" aria-labelledby="login-title">
           <h3 id="login-title">05 · Login and logout</h3>
-          <p>Replace the Windows-only entry point in the login controller or Web Forms button event. Validate the form/CSRF token, resolve the email hint using <code>RegistrationRuntime.Route</code>, and challenge only that scheme.</p>
+          <p>Replace the Windows-only entry point with an asynchronous login controller or Web Forms handler. Validate the form/CSRF token, await the workforce lookup using <code>RegistrationRuntime.RouteAsync</code>, and challenge only the selected scheme. Port the complete lookup error handling as well as the challenge.</p>
           <details><summary>Login challenge — partial excerpt</summary>
-            <pre><code>var source = RegistrationRuntime.Route(Startup.Config, email);
+            <pre><code>var source = await RegistrationRuntime.RouteAsync(Startup.Config, email);
 var properties = new AuthenticationProperties { RedirectUri = "/Benefits/Index" };
 properties.Dictionary["login_hint"] = email.Trim();
 HttpContext.GetOwinContext().Authentication.Challenge(properties,
     source == IdentitySource.Workforce ? "workforce" : "external");
 return new HttpUnauthorizedResult(); // MVC action response</code></pre>
           </details>
-          <p>Employee domains route to workforce; other Sampleapp01 addresses route to External ID. Email is routing input, never proof of identity. A workforce error stays a workforce error. Logout is a CSRF-protected POST calling <code>SignOut(Startup.CookieScheme)</code>.</p>
+          <p>Graph-confirmed workforce UPNs select workforce; confirmed absence selects External ID. Lookup or workforce authentication failures do not retry another realm. Logout is a CSRF-protected POST calling <code>SignOut(Startup.CookieScheme)</code>.</p>
         </section>
 
         <section id="identity" aria-labelledby="identity-title">
           <h3 id="identity-title">06 · Existing user mapping</h3>
           <p>Replace lookups based on <code>DOMAIN\username</code> or email with an explicit mapping from validated <code>tid</code> + <code>oid</code> to the existing application user/employee key. The sample adds <code>subject_key = tid + ":" + oid</code>; app approvals are keyed by application, tenant and object ID.</p>
+          <p>Changing the UPN on the same directory account keeps its <code>tid</code> and <code>oid</code>, so its current mapping and approval remain; the new exact UPN is found without a domain-list update. A deleted/recreated account or an account from another tenant has a different stable identity and needs explicit mapping and approval. Its email must not inherit the former account's access.</p>
           <p>Keep existing bookings and employee numbers. Store persona, sponsor, status, expiry and benefit eligibility beside the mapping. A dependent links to the workforce employee's stable IDs and requires a verified relationship plus a current, benefit-eligible same-app employee approval. Email changes must not create new access. Replace AD group assumptions with the explicit app roles and approval rules; connect production eligibility to the customer's employee/relationship data.</p>
         </section>
 
@@ -150,7 +156,7 @@ return new HttpUnauthorizedResult(); // MVC action response</code></pre>
             <li>Normal MSAL login establishes a registration-only session. <code>CompletePost</code> rechecks identity and sponsor, atomically consumes the invitation and records approval; a fresh sign-in grants ordinary access.</li>
           </ol>
           <p>Home-page sign-in also resumes one unique current, sent invitation for the exact validated identity and app role. Invalid explicit links, duplicates and expired invitations fail. Keep CSRF protection, one-use token hashing and atomic storage; substitute a transactional production database for the PoC JSON store. Provisioning uses separate service permissions; interactive web login does not receive directory-write permissions.</p>
-          <div class="callout"><strong>Registration hosting:</strong> the current <code>RegistrationServices.cs</code> workforce Graph and ACS adapters require Azure App Service managed identity, its Graph application permissions and the ACS sender role. The external directory uses a separate provisioner. For VM or on-premises IIS, adapt token acquisition to a supported workload identity, certificate-backed service identity or secured registration service. The registration adapter cannot be copied unchanged to that host; ordinary OIDC login is independent of this dependency.</div>
+          <div class="callout"><strong>Graph lookup and registration hosting:</strong> workforce routing requires the server's Graph identity with <code>User.Read.All</code>. The current workforce Graph and ACS adapters use Azure App Service managed identity; registration also needs its listed permissions and sender role. The external directory uses a separate provisioner. For VM or on-premises IIS, adapt token acquisition to a supported workload identity, certificate-backed service identity or secured directory/registration service before enabling this Home login flow.</div>
         </section>
 
         <section id="iis" aria-labelledby="iis-title">
@@ -166,6 +172,9 @@ return new HttpUnauthorizedResult(); // MVC action response</code></pre>
             <thead><tr><th>Test</th><th>Expected result</th></tr></thead>
             <tbody>
               <tr><td>Employee role + current approval</td><td>Existing business screens open; employee can invite a dependent.</td></tr>
+              <tr><td>Workforce account lookup across UPN suffixes</td><td>Existing exact UPN uses the same workforce authority/client/callback; no domain-list maintenance.</td></tr>
+              <tr><td>Lookup absence / service or permission failure</td><td>Confirmed absence selects External ID; errors stop with HTTP 503.</td></tr>
+              <tr><td>UPN change / replacement directory account</td><td>Same stable account retains current approval; a new object ID cannot inherit access by email.</td></tr>
               <tr><td>Recipient email/password setup + confirmation</td><td>Fresh login admits only the approved dependent app/persona.</td></tr>
               <tr><td>Password created; confirmation unfinished</td><td>Home login resumes confirmation; benefits remain denied.</td></tr>
               <tr><td>Wrong identity/app, missing role, expired approval</td><td>Access denied, including direct endpoint requests.</td></tr>

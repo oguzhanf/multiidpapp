@@ -83,6 +83,7 @@ internal static class Program
         Check("signed ID token foreign signing key denied", TokenValidationTests.ForeignKeyRejected);
         RegistrationTests.Run(Check);
         RegistrationFlowTests.Run(Check);
+        WorkforceResolverTests.Run(Check);
         PasswordSetupTests.Run(Check);
         Console.WriteLine("Net48 policy: " + (total - failures) + "/" + total + " passed");
         return failures == 0 ? 0 : 1;

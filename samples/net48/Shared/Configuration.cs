@@ -18,7 +18,8 @@ namespace MultiIdp.Net48
             try { config = JsonConvert.DeserializeObject<AppConfiguration>(File.ReadAllText(path)); }
             catch (Exception ex) when (ex is IOException || ex is JsonException || ex is UnauthorizedAccessException) { throw new ConfigurationException("The application configuration could not be read. Check JSON and file permissions."); }
             if (config == null || config.AppId != appId) throw new ConfigurationException("appId must match " + appId + ".");
-            if (config.EmployeeDomains == null || config.EmployeeDomains.Length == 0 || config.EmployeeDomains.Any(d => !ValidDomain(d))) throw new ConfigurationException("employeeDomains must contain exact DNS domains.");
+            if (config.AppId == "sampleapp01" && config.EmployeeDomains == null) config.EmployeeDomains = new string[0];
+            if (config.EmployeeDomains == null || (config.AppId != "sampleapp01" && config.EmployeeDomains.Length == 0) || config.EmployeeDomains.Any(d => !ValidDomain(d))) throw new ConfigurationException("employeeDomains must contain exact DNS domains for sampleapp02.");
             if ((config.ApprovedPartnerDomains ?? new string[0]).Any(d => !ValidDomain(d))) throw new ConfigurationException("approvedPartnerDomains must contain exact onboarded DNS domains.");
             ValidateTenant(config.Workforce, false); ValidateTenant(config.External, true);
             if (config.Workforce.TenantId == config.External.TenantId || config.Workforce.ClientId == config.External.ClientId) throw new ConfigurationException("Workforce and External ID require separate tenants and client registrations.");

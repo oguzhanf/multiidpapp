@@ -12,7 +12,7 @@ Inspect the actual repository first. Identify the existing authentication, login
 
 - Repository: <https://github.com/oguzhanf/multiidpapp>
 - Working branch: `poc/net48-dual-tenant`.
-- Reference baseline: commit `44affa2182337c337a0756016019f37cb7166960`. It includes the tested pending-registration login correction. Pin this revision when comparing code; later commits may add documentation or changes.
+- Historical baseline: commit `44affa2182337c337a0756016019f37cb7166960`. It includes the tested pending-registration login correction and predates the automatic workforce-account lookup described below. Use the supplied current source ZIP or matching reviewed branch revision for that routing implementation; do not copy the historical domain router for this requirement.
 - [Download the reference repository at that revision](https://github.com/oguzhanf/multiidpapp/archive/44affa2182337c337a0756016019f37cb7166960.zip), or use the source ZIP supplied by the PoC owner.
 - Source directory: `samples/net48/Shared/`; app-specific project/configuration: `samples/net48/sampleapp01/`.
 - Reference tests: `tests/Net48/`.
@@ -29,7 +29,7 @@ Repository paths below are reference locations, **not assumed paths in the custo
 | Retiree | Dedicated External ID tenant | `Retiree` | Approved retirement eligibility, accountable sponsor and expiry |
 | Other approved personal customer, if enabled | Dedicated External ID tenant | `External` | Explicit app approval, sponsor and expiry |
 
-This brief covers Sampleapp01. Workforce B2B partners and the `admin` / `dependentRegistrant` capabilities belong to Sampleapp02 and must not be introduced into this implementation. App01's employee role permits dependent invitations only when the employee's approval and benefit eligibility are current. Automated retiree enrollment is a separate customer workflow; the sample demonstrates retiree admission, not a retirement-verification system.
+This brief covers Sampleapp01's employees and approved personal customer identities. Its employee role permits dependent invitations only when the employee's approval and benefit eligibility are current. Automated retiree enrollment is a separate customer workflow; the sample demonstrates retiree admission, not a retirement-verification system.
 
 One login entry point selects one of two passive OIDC providers. Both providers issue the application's secure cookie. Authentication proves identity; the app's governance rules decide access. A failed workforce sign-in must not automatically retry External ID.
 
@@ -44,7 +44,8 @@ Inventory MVC, Web Forms or mixed hosting, the project/NuGet format, `Global.asa
 | Existing code-redemption handler | MSAL confidential client per provider; preserve PKCE/state/nonce | `Shared/MsalOpenIdConnect.cs` |
 | Token validator | Mandatory signature, issuer, audience and lifetime checks | `Shared/StrictJwtSecurityTokenHandler.cs` |
 | Private configuration loader | Separate tenant/client/callback/credential settings | `Shared/Configuration.cs` |
-| Login controller/page event | Validated email hint and selected-provider challenge | `Shared/Controllers.cs` |
+| Login controller/page event and directory adapter | Exact entered UPN lookup in the configured workforce tenant, then selected-provider challenge | `Shared/Controllers.cs`, `Shared/RegistrationServices.cs` |
+| Workforce account resolver | Server-side Graph lookup; confirmed absence versus unavailable result | `Shared/WorkforceAccountResolver.cs` |
 | User/employee repository and shared access guard | Stable identity mapping and current business approval | `Shared/Policy.cs`, `Shared/RegistrationControllers.cs` |
 | Employee invitation/recipient pages | Role-gated invitation and confirmation | `Shared/RegistrationControllers.cs` |
 | Governance/invitation repository | Bound invitation, one-use redemption and approvals | `Shared/Registration.cs` |
@@ -70,13 +71,13 @@ The reference build uses these versions; these are tested versions, not a claim 
 | `Newtonsoft.Json` | `13.0.4` |
 | `Microsoft.AspNet.Mvc`, when retaining sample MVC code | `5.3.0` |
 
-Install through the customer's existing NuGet workflow, retain target Framework 4.8, include adapted source as normal project items, and reconcile compatible versions and `web.config` binding redirects. A classic non-SDK project does not need `Directory.Build.props` or SDK conversion. If copying shared `Startup.cs` unchanged, define `SAMPLEAPP01`; otherwise its conditional compilation selects Sampleapp02. Keep `appId=sampleapp01` for the reference PoC. A different customer application identifier requires updating `RegistrationPolicy.KnownApp`, every app-specific policy/routing branch, configuration names and approval/invitation store scoping consistently, with regression checks; changing only the JSON value is insufficient.
+Install through the customer's existing NuGet workflow, retain target Framework 4.8, include adapted source as normal project items, and reconcile compatible versions and `web.config` binding redirects. A classic non-SDK project does not need `Directory.Build.props` or SDK conversion. If copying shared `Startup.cs` unchanged, define `SAMPLEAPP01` so conditional compilation selects this application's identity and policy. Keep `appId=sampleapp01` for the reference PoC. A different customer application identifier requires updating `RegistrationPolicy.KnownApp`, every app-specific policy/routing branch, configuration names and approval/invitation store scoping consistently, with regression checks; changing only the JSON value is insufficient.
 
 ## 3. Supply tenant and server settings
 
 Obtain these from the customer's tenant administrator/private deployment configuration:
 
-- Workforce tenant ID, existing or agreed workforce client ID, exact discovery issuer and employee routing domains.
+- Workforce tenant ID, existing or agreed workforce client ID, exact discovery issuer and the server-side Graph identity/permissions for account lookup.
 - External tenant ID, CIAM hostname, separate external client ID, exact discovery issuer and controlled user-flow association.
 - HTTPS application origin and separate registered **Web** callbacks `/signin-workforce` and `/signin-external`. Existing callbacks must remain consistent with the working integration during migration; update code and registration together if adopting the reference paths.
 - Separate server-side credentials, app-role assignments, approval store, sponsor/relationship source, email sender and provisioning identities.
@@ -91,7 +92,7 @@ Example **synthetic** configuration matching the reference schema:
 ```json
 {
   "appId": "sampleapp01",
-  "employeeDomains": ["employee.example"],
+  "employeeDomains": [],
   "approvedPartnerDomains": [],
   "workforce": {
     "tenantId": "11111111-1111-4111-8111-111111111111",
@@ -113,6 +114,16 @@ Example **synthetic** configuration matching the reference schema:
 ```
 
 Replace every synthetic tenant/domain/client value privately before a real sign-in. `MULTIIDP_SAMPLEAPP01_CONFIG` points to an absolute protected config path. Credential values stay in the server secret mechanism; the JSON records variable names only. The IIS worker needs access to its configuration and secret settings after pool recycle.
+
+### Automatic workforce account lookup across all UPN domains
+
+Sampleapp01's login calls `RegistrationRuntime.RouteAsync`, backed by `WorkforceAccountResolver.ResolveAsync`, to query the configured **workforce tenant** through Microsoft Graph for the exact entered UPN. It does not maintain an employee-domain allowlist or synchronize a list of verified domains. Accounts such as `employee@company.example`, `employee@subsidiary.example` and `employee@tenant.onmicrosoft.com` use the same lookup; these synthetic suffixes are examples, not configuration entries. `employeeDomains` is retained in the shared configuration schema for compatibility and can be empty for Sampleapp01; it must not decide this first-stage account route.
+
+An existing exact UPN selects `workforce`, including a found disabled account or Guest; finding an object grants no access. Directory sign-in, the signed app role and current application approval still apply. Only a confirmed absence selects `external`. A lookup permission/service error, timeout or invalid response must fail with an unavailable result (HTTP 503), never be treated as absence or retry External ID.
+
+Every workforce account found across the tenant's UPN suffixes selects the same `workforce` scheme, authority, client ID and `/signin-workforce` callback. No provider, client or list entry is needed per suffix. Require the actual UPN: Graph lookup does not automatically resolve SMTP aliases. Even if the customer's Entra sign-in policy supports an alternate email, this lookup needs a separately designed, tested resolver before accepting that alternative.
+
+A UPN change on the **same directory account** retains its `tid` and `oid`, so the existing internal-user mapping and current approval remain tied to that account; the new exact UPN is looked up without changing a domain list. Deleting/recreating an account, or using another tenant's account, produces a different stable identity and requires explicit mapping and approval; the old email or UPN must not transfer access automatically.
 
 Registration uses separate configuration (`MULTIIDP_SAMPLEAPP01_REGISTRATION_CONFIG` in the sample). Never commit production identities, recipient addresses, invitation tokens/hashes, credentials or live governance records. Keep durable invitation/approval storage outside folders replaced by deployment.
 
@@ -140,11 +151,11 @@ var result = await client.AcquireTokenByAuthorizationCode(new string[0], request
 
 Reuse/adapt the strict validator; require a signed ID token, trusted signing key, exact issuer/audience, valid lifetime, expected `tid` and stable `oid`. Keep claim names consistent (`MapInboundClaims=false`, role claim `roles`). `SecurityTokenValidated` calls `RegistrationSignInPolicy.Validate` after token validation, before issuing ordinary or registration-only access. Do not replace validation with decoded token contents or bypass nonce checking through manual code handling.
 
-The existing login POST/button event validates its form and selects the provider. For Sampleapp01, configured employee domains select workforce; other valid addresses select External ID. Email is a hint, not authorization. Use a fixed/local allowlisted return path.
+The existing asynchronous login POST/button event validates its form and awaits the exact workforce UPN lookup before selecting the provider. Only confirmed absence selects External ID; directory errors stop the request. The entered UPN selects an authentication route, not authorization. Use a fixed/local allowlisted return path.
 
 ```csharp
 // Partial MVC login example; preserve HTTPS, input and anti-forgery guards.
-var source = RegistrationRuntime.Route(Startup.Config, email);
+var source = await RegistrationRuntime.RouteAsync(Startup.Config, email);
 var properties = new AuthenticationProperties { RedirectUri = "/Benefits/Index" };
 properties.Dictionary["login_hint"] = email.Trim();
 HttpContext.GetOwinContext().Authentication.Challenge(properties,
@@ -193,9 +204,9 @@ Retiree and other personal-customer approvals require their own approved busines
 
 ## 7. Adapt provisioning/email to the actual host
 
-**Host dependency:** `RegistrationServices.cs` currently obtains workforce Graph and ACS tokens through Azure App Service managed-identity endpoints. It needs that identity's Graph application permissions and ACS sender role; the external directory uses a separate provisioner. The interactive login registrations must not gain directory-write permissions.
+**Host dependency:** the server's exact-UPN routing lookup and registration services obtain workforce Graph tokens through Azure App Service managed-identity endpoints. Routing requires the managed identity's `User.Read.All` Graph application permission; registration additionally needs its listed Graph permissions and ACS sender role. The external directory uses a separate provisioner. The interactive login registrations must not gain directory-write permissions.
 
-If the customer hosts ordinary IIS on a VM or on-premises, replace the App Service token-acquisition adapter with a host-supported workload identity, certificate-backed service identity or separately secured registration service. An Azure VM's managed-identity interface is not the App Service interface. Retain the same sponsor, recipient, role and approval checks. Ordinary OIDC/MSAL login is independent of this registration adapter.
+If the customer hosts ordinary IIS on a VM or on-premises, replace the App Service token-acquisition adapter with a host-supported workload identity, certificate-backed service identity or separately secured directory/registration service. An Azure VM's managed-identity interface is not the App Service interface. Make the workforce lookup available before enabling the Home login flow; retain the same sponsor, recipient, role and approval checks. OIDC/MSAL performs authentication after this server-side route selection.
 
 Inspect `scripts/poc/Configure-PocRegistration.ps1` and `Configure-PocPasswordSetup.ps1` for the reference service setup. Adapt resource ownership, permissions, credential lifecycle, private configuration and email sender to customer infrastructure; these PoC scripts are not customer production deployment scripts.
 
@@ -212,6 +223,8 @@ An OIDC claims principal does not create a Windows access token, Kerberos ticket
 | Check | Required evidence |
 |---|---|
 | Existing workforce login | Correct workforce client/tenant; employee business screens still work |
+| Workforce account lookup | Existing exact UPN across any tenant suffix selects the same workforce tenant/client/callback; only confirmed absence selects External ID; permission/service failures stop with HTTP 503 |
+| Employee UPN change / replacement account | Same-account `tid`/`oid` keeps its current mapping/approval without a domain-list update; a new object ID cannot inherit approval by email |
 | External login | Exact CIAM issuer/client and signed assigned persona; same application screens use the mapped internal key |
 | Invalid token/source | Wrong tenant, issuer, audience, unsigned/expired token or missing required role cannot establish permitted access |
 | Workforce failure | No External ID fallback |
@@ -227,7 +240,7 @@ An OIDC claims principal does not create a Windows access token, Kerberos ticket
 | Deployment | Private state survives deploy/restart as designed; transient setup sessions expire safely; secrets and bearer links stay out of source/logs |
 | Downstream access | Required SQL/file/service paths work under the agreed identity design |
 
-The reference source had 216 automated checks passing and a live app01 dependent resumption/confirmation/fresh-login admission check. These are reference results, not evidence that the customer's deployment works; a new recipient's complete password-creation path must be exercised separately in their environment.
+The current reference source passed 232 automated checks, including workforce lookup across 100 synthetic UPN domains. Live first-stage routing confirmed workforce and personal-dependent redirects to their respective authorities. The earlier live app01 dependent resumption/confirmation/fresh-login admission check remains separate evidence; it was not repeated for this routing change. Exercise a new recipient's complete password-creation path and the customer deployment's acceptance tests separately.
 
 Return:
 

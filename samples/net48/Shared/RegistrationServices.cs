@@ -66,6 +66,14 @@ namespace MultiIdp.Net48
             return Store(config).HasApprovedPartnerDomain(config, domain, DateTimeOffset.UtcNow) ? IdentitySource.Workforce : IdentitySource.External;
         }
 
+        public static Task<IdentitySource> RouteAsync(AppConfiguration config, string identifier)
+        {
+            if (config?.AppId == "sampleapp01")
+                return new WorkforceAccountResolver(Http, _ => ManagedIdentityTokenAsync("https://graph.microsoft.com")).ResolveAsync(identifier);
+            if (config?.AppId == "sampleapp02") return Task.FromResult(Route(config, identifier));
+            throw new RegistrationException("Sign-in routing is not configured for this application.");
+        }
+
         public static RegistrationConfiguration Settings(AppConfiguration config)
         {
             if (!Enabled(config)) throw new RegistrationException("Registration is not configured for this application.");

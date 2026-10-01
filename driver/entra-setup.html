@@ -38,7 +38,7 @@
           <li><a href="#validation">Run the acceptance checks</a></li>
         </ol>
         <a class="rail-overview" href="#automation">Repository setup order</a>
-        <a class="rail-overview" href="login-routing.html">How login is routed</a>
+        <a class="rail-overview" href="login-routing.html">Sampleapp01 login routing</a>
         <a class="rail-overview" href="migration-sampleapp01.html">Modify an existing app</a>
       </nav>
     </aside>
@@ -268,7 +268,7 @@
           <p class="setup-context">Application server: IIS / Windows App Service</p>
           <ol>
             <li>Record both clients, tenant IDs, exact redirect URIs and exact token issuers per app. Read the issuers from each tenant's OIDC discovery document.</li>
-            <li>Configure employee domains and approved partner routes. App01 routes employees to workforce and customers to external; App02 also supports approved workforce B2B partners.</li>
+            <li>App01 automatically resolves the entered UPN through workforce Microsoft Graph using the server's <code>User.Read.All</code> permission. Found accounts use workforce; a successful empty lookup selects external; errors stop login. No employee-domain list is maintained for App01. App02 retains its employee-domain and approved B2B partner routing configuration.</li>
             <li>Supply confidential-client secrets in server environment settings. Set the private identity and registration JSON paths; preserve durable invitation/approval state outside deployment content.</li>
             <li>Deploy the net48 application changes described in <a href="migration-sampleapp01.html">Modify an existing .NET 4.8 application</a>. Both providers must validate signature, issuer, audience, lifetime, nonce and state before creating the shared application cookie.</li>
             <li>Verify current approval by <strong>app + tenant ID + object ID</strong>, persona role, expiry, and dependent / partner rules on protected application requests.</li>

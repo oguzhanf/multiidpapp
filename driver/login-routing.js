@@ -2,18 +2,16 @@
   "use strict";
   const shared = "samples/net48/Shared/";
   const excerpts = {
-    login: { file: "Controllers.cs", start: "public ActionResult Login(string email)", end: "[HttpPost, ValidateAntiForgeryToken]", before: 1 },
-    router: { file: "Policy.cs", start: "public static class IdentityRouter", end: "public sealed class AdmissionDecision" },
-    runtime: { file: "RegistrationServices.cs", start: "public static IdentitySource Route(AppConfiguration config, string email)", end: "public static RegistrationConfiguration Settings" },
-    "partner-domain": { file: "Registration.cs", start: "public bool HasApprovedPartnerDomain", end: "private static void RequireCurrent", app: "sampleapp02" },
+    login: { file: "Controllers.cs", start: "public async Task<ActionResult> Login(string email)", end: "[HttpPost, ValidateAntiForgeryToken]", before: 1 },
+    runtime: { file: "RegistrationServices.cs", start: 'if (config?.AppId == "sampleapp01")', end: 'if (config?.AppId == "sampleapp02")' },
+    resolver: { file: "WorkforceAccountResolver.cs", start: "public async Task<IdentitySource> ResolveAsync", end: "public static string NormalizeIdentifier" },
     providers: { file: "Startup.cs", start: "Config = ConfigurationLoader.Load(AppId);", end: "catch (ConfigurationException ex)", before: 2 },
     authority: { file: "Startup.cs", start: "var source = external ?", end: "RequireHttpsMetadata = true", inclusive: true },
     msal: { file: "MsalOpenIdConnect.cs", start: "protected override async Task<OpenIdConnectMessage> RedeemAuthorizationCodeAsync", end: "// AccessToken is transient" },
     "validation-hook": { file: "Startup.cs", start: "SecurityTokenValidated = notification =>", end: "AuthenticationFailed = notification =>" },
-    admission: { file: "Policy.cs", start: "var tid = Single(principal,", end: 'if (entry.Persona == "employee")' },
-    "home-proof": { file: "Policy.cs", start: 'var idp = Single(principal, "idp");', end: "else return Deny", app: "sampleapp02" },
-    discovery: { file: "RegistrationServices.cs", start: "private static async Task<string> ResolveOrganizationAsync", end: "private static async Task<string> GetOrCreateCustomerAsync", app: "sampleapp02" },
-    "invitation-begin": { file: "RegistrationControllers.cs", start: "public ActionResult Begin(string token)", end: "[HttpPost, ValidateAntiForgeryToken, AsyncTimeout", before: 1, app: "sampleapp02" },
+    admission: { file: "Policy.cs", start: "var tid = Single(principal,", end: "var requiredRole =" },
+    "dependent-admission": { file: "Policy.cs", start: 'if (entry.Persona == "dependent")', end: 'else if (entry.Persona == "partner")' },
+    "invitation-begin": { file: "RegistrationControllers.cs", start: "public ActionResult Begin(string token)", end: "[HttpPost, ValidateAntiForgeryToken, AsyncTimeout", before: 1 },
     failure: { file: "Startup.cs", start: "AuthenticationFailed = notification =>", end: "return Task.FromResult(0);", inclusive: true }
   };
   const files = window.pocCodeSamples && window.pocCodeSamples.files;
@@ -42,7 +40,7 @@
     element.dataset.loaded = "true";
     document.querySelectorAll('[data-source-link="' + name + '"]').forEach(link => {
       link.textContent = definition.file + ":" + (start + 1) + "–" + end;
-      link.href = "index.html#code/" + (definition.app || "sampleapp01") + "/" + encodeURIComponent(path);
+      link.href = "index.html#code/sampleapp01/" + encodeURIComponent(path);
     });
     loaded++;
   });

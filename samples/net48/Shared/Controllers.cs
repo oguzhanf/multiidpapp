@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Security.Claims;
+using System.Threading.Tasks;
 using System.Web;
 using System.Web.Helpers;
 using System.Web.Mvc;
@@ -25,10 +26,11 @@ namespace MultiIdp.Net48
         public ActionResult Index()
         {
             var configured = Startup.ConfigurationError == null && Startup.Config != null;
-            var message = configured ? "Choose your email to start. Your email selects a directory; admission requires validated identity and approval." : "Configuration needed: " + Startup.ConfigurationError;
+            var message = configured ? (Startup.AppId == "sampleapp01" ? "Enter your sign-in address to start. Your verified identity and current application approval determine access." : "Choose your email to start. Your email selects a directory; admission requires validated identity and approval.") : "Configuration needed: " + Startup.ConfigurationError;
             if (configured && Request.QueryString["registration"] == "complete") message = "Registration completed. Sign in with your invited account to check application access.";
-            var form = Request.IsSecureConnection ? "<form method='post' action='/Account/Login'>" + AntiForgery.GetHtml().ToHtmlString() + "<label for='email'>Work or personal email</label><input id='email' name='email' type='email' autocomplete='username' maxlength='254' required><button type='submit'>Sign in</button></form>" : "<p>Open this application over HTTPS to sign in.</p>";
-            return Content(Page("Welcome", "<p>" + Encode(message) + "</p>" + form + "<p><a href='/Benefits/Index'>Check my application access</a></p><p class='note'>Employee domains use the workforce directory. Approved partner routes are available in sampleapp02. Other addresses use External ID. A Microsoft 365 partner must complete organizational B2B onboarding.</p>"), "text/html");
+            var form = Request.IsSecureConnection ? "<form method='post' action='/Account/Login'>" + AntiForgery.GetHtml().ToHtmlString() + "<label for='email'>" + (Startup.AppId == "sampleapp01" ? "Sign-in email or UPN" : "Work or personal email") + "</label><input id='email' name='email' type='email' autocomplete='username' maxlength='254' required><button type='submit'>Sign in</button></form>" : "<p>Open this application over HTTPS to sign in.</p>";
+            var routingNote = Startup.AppId == "sampleapp01" ? "The app automatically checks your exact sign-in address (UPN) against the workforce directory. Existing accounts continue with workforce sign-in. A confirmed absence uses External ID for personal accounts. Use your sign-in UPN rather than an email alias." : "Employee domains use the workforce directory. Approved partner routes are available in sampleapp02. Other addresses use External ID. A Microsoft 365 partner must complete organizational B2B onboarding.";
+            return Content(Page("Welcome", "<p>" + Encode(message) + "</p>" + form + "<p><a href='/Benefits/Index'>Check my application access</a></p><p class='note'>" + routingNote + "</p>"), "text/html");
         }
         [HttpGet]
         public ActionResult Code()
@@ -123,16 +125,17 @@ namespace MultiIdp.Net48
 
     public sealed class AccountController : Controller
     {
-        [HttpPost, ValidateAntiForgeryToken]
-        public ActionResult Login(string email)
+        [HttpPost, ValidateAntiForgeryToken, AsyncTimeout(120000)]
+        public async Task<ActionResult> Login(string email)
         {
             if (!Request.IsSecureConnection) return new HttpStatusCodeResult(400, "HTTPS is required.");
             if (Startup.ConfigurationError != null || Startup.Config == null) return Content(HomeController.Page("Configuration needed", "<p>" + HomeController.Encode(Startup.ConfigurationError) + "</p><a href='/'>Return home</a>"), "text/html");
             IdentitySource source;
-            try { source = RegistrationRuntime.Route(Startup.Config, email); }
+            Response.Cache.SetNoStore();
+            try { source = await RegistrationRuntime.RouteAsync(Startup.Config, email); }
             catch (ArgumentException ex) { Response.StatusCode = 400; return Content(HomeController.Page("Email required", "<p>" + HomeController.Encode(ex.Message) + "</p><a href='/'>Return home</a>"), "text/html"); }
-            catch (Exception ex) when (ex is RegistrationException || ex is ConfigurationException || ex is System.IO.IOException || ex is UnauthorizedAccessException || ex is Newtonsoft.Json.JsonException)
-            { Response.StatusCode = 503; return Content(HomeController.Page("Sign-in routing unavailable", "<p>Application approvals are temporarily unavailable. Try again or contact your application administrator.</p><a href='/'>Return home</a>"), "text/html"); }
+            catch (Exception ex) when (ex is RegistrationException || ex is ConfigurationException || ex is System.IO.IOException || ex is UnauthorizedAccessException || ex is Newtonsoft.Json.JsonException || ex is System.Net.Http.HttpRequestException || ex is OperationCanceledException)
+            { Response.StatusCode = 503; return Content(HomeController.Page("Sign-in routing unavailable", "<p>The sign-in routing service is temporarily unavailable. Try again or contact your application administrator.</p><a href='/'>Return home</a>"), "text/html"); }
             var properties = new AuthenticationProperties { RedirectUri = "/Benefits/Index" };
             properties.Dictionary["login_hint"] = email.Trim();
             HttpContext.GetOwinContext().Authentication.Challenge(properties, source == IdentitySource.Workforce ? "workforce" : "external");

@@ -207,7 +207,7 @@
       body: (app, v) => {
         const config = {
           appId: app,
-          employeeDomains: domains(v.employeeDomains),
+          employeeDomains: app === "sampleapp01" ? [] : domains(v.employeeDomains),
           approvedPartnerDomains: app === "sampleapp02" ? domains(v.approvedPartnerDomains) : [],
           entitlementFile: `C:\\PocPrivate\\${app}.entitlements.json`,
           workforce: { tenantId: v.workforceTenantId, clientId: v.workforceClientId, clientSecretEnvironmentVariable: `${envPrefix(app)}_WORKFORCE_SECRET`, redirectUri: callback(v, "workforce"), issuer: v.workforceIssuer },
@@ -230,7 +230,7 @@
         ["Workforce", inline(workforceAuthority(v)), inline(callback(v, "workforce"))],
         ["External ID", inline(externalAuthority(v)), inline(callback(v, "external"))]
       ]) + list([
-        "The public sign-in page accepts an email routing hint. Employee domains and explicitly onboarded app02 partner domains choose workforce; other valid domains choose External ID. There is no retry against External ID after a workforce error.",
+        app === "sampleapp01" ? "Sampleapp01 awaits an exact UPN lookup in workforce Microsoft Graph across all tenant domains. A matching account chooses workforce; a successful empty result chooses External ID. Lookup errors stop login. A failed workforce sign-in never changes realms." : "The public sign-in page accepts an email routing hint. Employee domains and explicitly onboarded app02 partner domains choose workforce; other valid domains choose External ID. There is no retry against External ID after a workforce error.",
         "Both apps reuse the same System.Web/OWIN authentication source. Two tenant-specific OIDC middleware instances use separate client IDs and callback paths with code flow, state, nonce and PKCE S256.",
         "The MSAL code-redemption handler passes the returned ID token back through Katana's normal validation pipeline. A strict JWT validator requires signed tokens; Katana validates issuer, audience, lifetime and nonce. Application code then checks tenant, stable subject and allowed identity source.",
         "The app adds trusted source/subject claims and issues a secure application cookie. Protected actions require the current approved entitlement; app-owned authorization never trusts an email domain or sign-up persona."
@@ -353,6 +353,8 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     const form = document.getElementById("values-form");
     fieldNames.forEach(key => { form.elements[key].value = v[key]; });
     document.getElementById("partner-field").hidden = state.app !== "sampleapp02";
+    document.getElementById("employee-field").hidden = state.app !== "sampleapp02";
+    document.getElementById("employee-domains").required = state.app === "sampleapp02";
     document.getElementById("open-demo").href = v.baseUrl;
     for (const app of appIds) {
       const values = state.values[app];
@@ -397,6 +399,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
   }
   function currentTitleId() { return currentView === "architecture" ? "architecture-title" : currentView === "code" ? "code-title" : "step-title"; }
   const architectureChoices = {
+    "app01-identities": { title: "Automatic workforce account lookup", text: ["Sampleapp01 queries the exact entered UPN in Caldova through server-side Microsoft Graph. Every workforce UPN domain uses that same lookup and authority; no domain list is maintained. A confirmed empty result selects External ID.", "Lookup errors stop login. A found disabled or unassigned account stays on workforce and cannot bypass its policy through External ID. Signed tenant, object, role and current approval decide admission."], source: "samples/net48/Shared/WorkforceAccountResolver.cs" },
     identities: { title: "A routing hint is not an identity", text: ["Employee domains and explicitly onboarded app02 partner domains select the workforce authority. Other valid domains select External ID. An email address alone never proves organizational membership or application access.", "A workforce error is not retried against External ID. Signed tenant, object, role and application approvals decide admission."], source: "samples/net48/Shared/Policy.cs" },
     workforce: { title: "Caldova is the workforce resource tenant", text: ["Employees authenticate in Caldova. Approved organizational partners authenticate through workforce B2B as resource-tenant guest objects, after home-organization verification.", "Every app binds a tenant-specific authority, client ID, exact discovery issuer and callback. Identity keys use tenant/object IDs rather than email addresses."], source: "samples/net48/Shared/Configuration.cs" },
     partners: { title: "Partner admission is app02-specific", text: ["Partner requires the signed Partner role, a resource-tenant guest identity, a verified home organization and exact signed home-issuer evidence in idp. The app-local record also requires a sponsor, approved status and expiry.", "App01 has no partner route or Partner entitlement. Invitation acceptance is separate from MFA, token redemption and protected application admission."], source: "samples/net48/Shared/Policy.cs" },
@@ -415,6 +418,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     "b2b-invitation": { title: "Pending live validation: organizational invitations", text: ["Exact known consumer providers such as gmail.com use External ID. Other-domain discovery gives a candidate home tenant, not account or product-license evidence. App02 Employee plus admin uses one Graph invitation with sendInvitationMessage=false; ACS delivers its bound guest's native inviteRedeemUrl.", "Resource-tenant redemption and app confirmation require signed home-issuer proof, the assigned Partner role and current sponsored approval. Delivery and end-to-end admission remain pending; app01 never admits Partner."], source: "samples/net48/Shared/RegistrationServices.cs" },
     email: { title: "Configured: Azure managed email delivery", text: ["The approved ACS sender supports personal invitations and native organizational B2B URLs. Site managed identities use workforce Graph and ACS; a separate external provisioner creates customers and assigns their persona roles. Interactive OIDC clients retain sign-in scopes.", "Credentials, configuration and recipient records stay server-side. Queued/sent/pending/failed email status does not grant approval. Confirm actual receipt, account setup and redemption before marking the workflow complete."], source: "samples/net48/Shared/RegistrationServices.cs" }
   };
+  function currentArchitectureChoice() { return architectureChoices[architectureChoice === "identities" && state.app === "sampleapp01" ? "app01-identities" : architectureChoice]; }
   function renderArchitecture() {
     document.querySelectorAll(".architecture-tabs [role='tab']").forEach(tab => {
       const selected = tab.dataset.flow === architectureFlow;
@@ -423,7 +427,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     document.getElementById("architecture-signin").hidden = architectureFlow !== "signin";
     document.getElementById("architecture-registration").hidden = architectureFlow !== "registration";
     document.querySelectorAll("[data-choice]").forEach(node => node.setAttribute("aria-pressed", String(node.dataset.choice === architectureChoice)));
-    const choice = architectureChoices[architectureChoice];
+    const choice = currentArchitectureChoice();
     document.getElementById("architecture-choice-title").textContent = choice.title;
     document.getElementById("architecture-choice-body").replaceChildren(...choice.text.map(text => {
       const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph;
@@ -448,7 +452,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     event.preventDefault(); selectArchitectureFlow(event.key === "Home" ? "signin" : event.key === "End" ? "registration" : architectureFlow === "signin" ? "registration" : "signin", true);
   });
   document.getElementById("architecture-choice-source").addEventListener("click", () => {
-    selectedCodeFiles[state.app] = architectureChoices[architectureChoice].source; selectView("code");
+    selectedCodeFiles[state.app] = currentArchitectureChoice().source; selectView("code");
   });
   function updateRailHeight() {
     document.documentElement.style.setProperty("--header-height", `${document.querySelector(".site-header").getBoundingClientRect().height}px`);
@@ -507,7 +511,13 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
       ["Personal recipient: verify email and create a password. Organizational recipient: redeem B2B using the existing work account and its organization's authentication requirements.", "PasswordSetupController.cs"],
       ["MatchesBoundIdentity validates the signed home issuer for partners plus expected tenant, object, audience and persona. Confirm commits app approval only after these checks.", "RegistrationControllers.cs"]
     ] },
-    { id: "workforce", title: "Caldova employee login", summary: "Workforce tenant authenticates the employee; the application separately decides access.", steps: [
+    { id: "workforce", app: "sampleapp01", title: "Caldova employee login", summary: "Sampleapp01 automatically looks up the workforce UPN across all tenant domains before sign-in.", steps: [
+      ["AccountController.Login awaits RegistrationRuntime.RouteAsync. The server's managed identity queries the exact UPN in workforce Graph using User.Read.All; no employee-domain list is used.", "WorkforceAccountResolver.cs"],
+      ["A matching account selects workforce. Only a successful empty result selects External ID. Permission, service, timeout or malformed-response failures stop routing with HTTP 503.", "WorkforceAccountResolver.cs"],
+      ["Startup registers one workforce authority, client and callback for all workforce UPN suffixes. Katana handles nonce, state and PKCE; MSAL redeems the code.", "Startup.cs"],
+      ["AdmissionPolicy requires the signed Employee role and a current approval for this app + tenant + object. A disabled or unassigned workforce account cannot switch realms to gain access.", "Policy.cs"]
+    ] },
+    { id: "workforce", app: "sampleapp02", title: "Caldova employee login", summary: "Workforce tenant authenticates the employee; the application separately decides access.", steps: [
       ["IdentityRouter selects workforce for the configured Caldova employee domain. The server starts the workforce challenge.", "Controllers.cs"],
       ["Startup registers the tenant-specific authority, app registration and redirect URI. Katana handles nonce, state and PKCE; MSAL redeems the authorization code.", "Startup.cs"],
       ["RedeemAuthorizationCodeAsync sends the protected code verifier to MSAL. The returned ID token passes signature, issuer, audience and lifetime validation.", "MsalOpenIdConnect.cs"],
@@ -615,7 +625,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     save(); renderProgress();
   });
   document.getElementById("reset-progress").addEventListener("click", () => { state.progress[state.app] = {}; save(); render(false, false); announce(`${state.app} progress reset. Application values retained.`); });
-  function validateValues(v) {
+  function validateValues(v, app = state.app) {
     let error = "";
     const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (["workforceTenantId", "workforceClientId", "externalTenantId", "externalClientId"].some(key => !guid.test(v[key]))) error = "Use GUIDs for both tenant IDs and both client IDs.";
@@ -629,8 +639,8 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     v.ciamDomain = v.ciamDomain.toLowerCase();
     if (!error && !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.ciamlogin\.com$/.test(v.ciamDomain)) error = "Use the actual CIAM hostname, without https:// or a path.";
     const domainPattern = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/;
-    if (!error && [...domains(v.employeeDomains), ...domains(v.approvedPartnerDomains)].some(domain => !domainPattern.test(domain))) error = "Use comma-separated domains without email addresses, wildcards or URLs.";
-    if (!error && domains(v.employeeDomains).length === 0) error = "Provide at least one employee routing domain.";
+    if (!error && app === "sampleapp02" && [...domains(v.employeeDomains), ...domains(v.approvedPartnerDomains)].some(domain => !domainPattern.test(domain))) error = "Use comma-separated domains without email addresses, wildcards or URLs.";
+    if (!error && app === "sampleapp02" && domains(v.employeeDomains).length === 0) error = "Provide at least one employee routing domain.";
     if (!error && v.workforceTenantId.toLowerCase() === v.externalTenantId.toLowerCase()) error = "Workforce and External ID must be separate tenant IDs.";
     if (!error && v.workforceClientId.toLowerCase() === v.externalClientId.toLowerCase()) error = "Workforce and External ID must use separate client IDs.";
     if (!error) {
@@ -652,7 +662,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     const error = validateValues(v);
     status.dataset.error = String(Boolean(error));
     if (error) { status.textContent = error; return; }
-    v.employeeDomains = domains(v.employeeDomains).join(", ");
+    v.employeeDomains = state.app === "sampleapp01" ? "" : domains(v.employeeDomains).join(", ");
     v.approvedPartnerDomains = state.app === "sampleapp02" ? domains(v.approvedPartnerDomains).join(", ") : "";
     state.values[state.app] = v;
     state.progress[state.app] = {};
@@ -673,9 +683,9 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
         const source = manifest.apps?.[app];
         if (!source || typeof source !== "object") throw new Error("Lab manifest is incomplete. Enter the values manually.");
         values[app] = Object.fromEntries(fieldNames.map(key => [key, Array.isArray(source[key]) ? source[key].join(", ") : typeof source[key] === "string" ? source[key].trim() : ""]));
-        const error = validateValues(values[app]);
+        const error = validateValues(values[app], app);
         if (error) throw new Error(`Lab values for ${app}: ${error}`);
-        values[app].employeeDomains = domains(values[app].employeeDomains).join(", ");
+        values[app].employeeDomains = app === "sampleapp01" ? "" : domains(values[app].employeeDomains).join(", ");
         values[app].approvedPartnerDomains = app === "sampleapp02" ? domains(values[app].approvedPartnerDomains).join(", ") : "";
       }
       if (automatic && !hasSyntheticValues()) return;
@@ -703,7 +713,7 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
   function preparePrint() {
     const v = state.values[state.app];
     const labels = { baseUrl: "HTTPS base URL", workforceTenantId: "Workforce tenant ID", workforceClientId: "Workforce client ID", workforceIssuer: "Workforce expected issuer", employeeDomains: "Employee routing domains", approvedPartnerDomains: "Approved partner routing domains", externalTenantId: "External tenant ID", externalClientId: "External client ID", ciamDomain: "CIAM hostname", externalIssuer: "External expected issuer" };
-    document.getElementById("print-runbook").innerHTML = `<h2 style="margin-top:8mm">${esc(state.app)} runbook</h2><p>Checkboxes reflect locally recorded verification, not automated tenant validation.</p><dl class="print-config">${fieldNames.filter(key => key !== "approvedPartnerDomains" || state.app === "sampleapp02").map(key => `<dt>${esc(labels[key])}</dt><dd>${esc(v[key])}</dd>`).join("")}</dl>${steps.map((_, index) => `<article>${stepMarkup(index, true)}</article>`).join("")}`;
+    document.getElementById("print-runbook").innerHTML = `<h2 style="margin-top:8mm">${esc(state.app)} runbook</h2><p>Checkboxes reflect locally recorded verification, not automated tenant validation.</p><dl class="print-config">${fieldNames.filter(key => !["employeeDomains", "approvedPartnerDomains"].includes(key) || state.app === "sampleapp02").map(key => `<dt>${esc(labels[key])}</dt><dd>${esc(v[key])}</dd>`).join("")}</dl>${steps.map((_, index) => `<article>${stepMarkup(index, true)}</article>`).join("")}`;
     document.querySelector("#print-runbook .source-excerpt").innerHTML = sourceMarkup();
   }
   document.getElementById("print-button").addEventListener("click", () => { preparePrint(); window.print(); });

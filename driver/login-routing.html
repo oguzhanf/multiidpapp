@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="Actual source code and call chain that routes Sampleapp01 and Sampleapp02 to workforce or External ID, starts authentication and checks returning identities.">
-  <title>How login is routed · PoC source walkthrough</title>
+  <meta name="description" content="Sampleapp01 source walkthrough: automatically look up the entered workforce UPN in Microsoft Graph across all employee domains, select its tenant, and validate identity and dependent approval.">
+  <title>Sampleapp01 login routing · PoC source walkthrough</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="site.css">
   <link rel="stylesheet" href="migration.css">
@@ -13,127 +13,138 @@
   <script src="login-routing.js" defer></script>
 </head>
 <body class="migration-page routing-page">
-  <a class="skip-link" href="#routing-content">Skip to login routing</a>
+  <a class="skip-link" href="#routing-content">Skip to Sampleapp01 login routing</a>
   <header class="site-header">
-    <div class="heading"><span class="product-mark" aria-hidden="true">CODE</span><div><h1>How login is routed</h1><p>Source walkthrough · workforce and External ID · ASP.NET Framework 4.8</p></div></div>
+    <div class="heading"><span class="product-mark" aria-hidden="true">CODE</span><div><h1>Sampleapp01 login routing</h1><p>Automatic workforce lookup · all UPN domains · ASP.NET Framework 4.8</p></div></div>
     <a class="secondary" href="index.html">Back to driver</a>
   </header>
   <div class="workspace">
     <aside class="rail">
-      <nav aria-label="Login routing walkthrough">
+      <nav aria-label="Sampleapp01 login routing walkthrough">
         <a class="rail-overview" href="#routing-content">Call chain</a>
         <ol>
+          <li><a href="#domains">Resolve workforce accounts automatically</a></li>
           <li><a href="#entry">The login POST</a></li>
           <li><a href="#decision">Choose the directory</a></li>
           <li><a href="#authority">Start the selected provider</a></li>
           <li><a href="#return">Handle the callback and identity</a></li>
-          <li><a href="#partners">Discover and onboard partners</a></li>
+          <li><a href="#dependent">The dependent invitation</a></li>
           <li><a href="#failure">Handle a failed sign-in</a></li>
           <li><a href="#change-map">Where the developer changes it</a></li>
         </ol>
-        <a class="rail-overview" href="entra-setup.html">Configure Entra</a>
-        <a class="rail-overview" href="migration-sampleapp01.html">Modify an existing app</a>
+        <a class="rail-overview" href="migration-sampleapp01.html">Modify Sampleapp01</a>
       </nav>
     </aside>
     <main>
       <article id="routing-content">
-        <h2>The application chooses the directory before sign-in</h2>
-        <p>The decision starts in <code>AccountController.Login</code>. It calls <code>RegistrationRuntime.Route</code>, which uses configured domains and, in App02, approved partner records. The controller then challenges the selected OWIN provider. Entra authenticates the user at that provider.</p>
-        <div class="routing-chain" aria-label="Normal login call chain"><span>Email form</span><span aria-hidden="true">→</span><span>AccountController.Login</span><span aria-hidden="true">→</span><span>RegistrationRuntime.Route</span><span aria-hidden="true">→</span><span>workforce / external challenge</span><span aria-hidden="true">→</span><span>Entra → callback → app approval</span></div>
-        <p class="source-note">Snippets below are extracted from the same source catalog as the driver code viewer. The displayed filenames and line numbers come from that catalog. These are partial source excerpts; open the complete linked file for implementation.</p>
+        <h2>Automatically resolve users across all workforce UPN domains</h2>
+        <p>Sampleapp01 checks the entered sign-in name against users in the configured workforce tenant through Microsoft Graph. A matching workforce account selects employee sign-in. A successful lookup with no matching account selects External ID. The app then requires the signed identity, role and current approval.</p>
+        <div class="routing-chain" aria-label="Sampleapp01 login call chain"><span>Employee UPN / personal email</span><span aria-hidden="true">→</span><span>AccountController.Login</span><span aria-hidden="true">→</span><span>RegistrationRuntime.RouteAsync</span><span aria-hidden="true">→</span><span>Workforce Graph lookup</span><span aria-hidden="true">→</span><span>workforce / external challenge</span><span aria-hidden="true">→</span><span>Entra → callback → app approval</span></div>
+        <p class="source-note">This walkthrough covers Sampleapp01. The excerpts show its path through the shared source files. Filenames and line numbers come from the deployed source catalog; open the complete linked file for implementation.</p>
         <p id="routing-status" class="source-note" role="status" aria-live="polite">Loading source excerpts…</p>
         <noscript><p>Enable JavaScript to view the excerpts, or <a href="source/net48-source.zip">download the complete source</a>.</p></noscript>
-        <nav class="migration-toc" aria-label="Jump to routing"><a href="#entry">Login</a><a href="#decision">Decision</a><a href="#authority">Authority</a><a href="#return">Callback</a><a href="#partners">Partners</a><a href="#failure">Failure</a></nav>
+        <nav class="migration-toc" aria-label="Jump to Sampleapp01 routing"><a href="#domains">Automatic lookup</a><a href="#entry">Login</a><a href="#decision">Decision</a><a href="#authority">Authority</a><a href="#return">Callback</a><a href="#dependent">Dependent</a><a href="#failure">Failure</a></nav>
+
+        <section id="domains" aria-labelledby="domains-title">
+          <h3 id="domains-title">01 · Query the workforce directory before sign-in</h3>
+          <p>The tenant can contain 100 different verified UPN domains. The server looks up the exact entered <code>userPrincipalName</code> in that tenant's user collection. There is no per-domain routing list to maintain for Sampleapp01.</p>
+          <p>For example, employees using <code>company.example</code>, <code>subsidiary.example</code> and the initial <code>onmicrosoft.com</code> domain all resolve through the same lookup. Adding another domain or employee in Entra does not require another provider or domain entry in this app.</p>
+          <p>The application backend uses its workforce managed identity with Microsoft Graph <code>User.Read.All</code>. The hosted PoC already uses that permission for sponsor checks. The confidential interactive login clients keep their sign-in scopes; the browser never receives a Graph service token. Other IIS hosts must provide an approved server-side Graph credential adapter.</p>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Entered sign-in name</th><th scope="col">Sampleapp01 route</th><th scope="col">Result to check</th></tr></thead><tbody>
+            <tr><td><code>alice@company.example</code> exists as a workforce UPN</td><td>Workforce</td><td>Configured workforce tenant and Employee role</td></tr>
+            <tr><td><code>bob@subsidiary.example</code> exists as a workforce UPN</td><td>Same workforce</td><td>Same tenant ID, workforce client and callback</td></tr>
+            <tr><td>A workforce UPN under a newly added domain</td><td>Same workforce</td><td>No domain-list change in Sampleapp01</td></tr>
+            <tr><td>No workforce user matches the entered sign-in name</td><td>External ID</td><td>External account, assigned persona role and current approval still required</td></tr>
+            <tr><td>Matching workforce account is disabled or unassigned</td><td>Workforce</td><td>Sign-in or admission denied; no change of realm</td></tr>
+            <tr><td>Lookup fails, times out or returns an ambiguous response</td><td>No sign-in challenge</td><td>HTTP 503; retry after the lookup service is restored</td></tr>
+          </tbody></table></div>
+          <ul>
+            <li>Keep one workforce authority: <code>https://login.microsoftonline.com/&lt;workforce-tenant-id&gt;</code>. Every workforce UPN uses that same tenant, client and <code>/signin-workforce</code> callback.</li>
+            <li>Enter the account's UPN. Each account has one UPN; SMTP aliases are separate. This resolver performs exact UPN lookup, so an alias is not automatically treated as another sign-in name. Alternate email sign-in would require a separately agreed resolver and Entra configuration.</li>
+            <li>Changing the UPN on the same account preserves its object ID. Approval and dependent links use tenant ID + object ID. Creating a replacement account creates a new identity requiring its own approval.</li>
+          </ul>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0">Microsoft: query users and application permissions</a> · <a href="https://learn.microsoft.com/en-us/entra/identity/users/domains-manage">Verified domains and UPNs</a> · <a href="https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference#use-claims-to-reliably-identify-a-user">Stable identity claims</a></p>
+        </section>
 
         <section id="entry" aria-labelledby="entry-title">
-          <h3 id="entry-title">01 · The login POST starts the selected challenge</h3>
-          <p>The home page posts the email to <code>/Account/Login</code>. This action requires HTTPS and an anti-forgery token. The routing result selects the named provider; <code>login_hint</code> only pre-fills the sign-in experience.</p>
+          <h3 id="entry-title">02 · The login POST starts the selected challenge</h3>
+          <p>The home page posts the sign-in name to <code>/Account/Login</code>. This async action requires HTTPS and an anti-forgery token. It awaits the directory lookup, then selects the named provider; <code>login_hint</code> pre-fills the sign-in experience.</p>
           <p class="source-note"><a data-source-link="login" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FControllers.cs">Controllers.cs · AccountController.Login</a></p>
           <pre tabindex="0" aria-label="Login controller source"><code data-snippet="login">Loading source…</code></pre>
           <ul>
-            <li><code>Challenge(..., "workforce")</code> starts the workforce provider.</li>
-            <li><code>Challenge(..., "external")</code> starts the External ID provider.</li>
-            <li><code>AuthenticationProperties.RedirectUri = "/Benefits/Index"</code> is the application destination after authentication. The Entra protocol callback is configured separately in step 03 below.</li>
+            <li><code>Challenge(..., "workforce")</code> starts employee sign-in.</li>
+            <li><code>Challenge(..., "external")</code> starts External ID sign-in.</li>
+            <li><code>AuthenticationProperties.RedirectUri = "/Benefits/Index"</code> is the application destination after authentication. The Entra protocol callback is configured separately in step 04.</li>
           </ul>
-          <p>The returned HTTP 401 triggers the selected middleware's authentication challenge and browser redirect. This action does not validate a password, search both directories or grant app access.</p>
+          <p>The HTTP 401 triggers the selected middleware's browser redirect. This action does not grant app access.</p>
         </section>
 
         <section id="decision" aria-labelledby="decision-title">
-          <h3 id="decision-title">02 · These methods decide workforce or external</h3>
-          <p><code>IdentityRouter.Route</code> validates the email and compares its domain with the private configuration. Matching is exact and case-insensitive; subdomains do not inherit an entry.</p>
-          <p class="source-note"><a data-source-link="router" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs · IdentityRouter</a></p>
-          <pre tabindex="0" aria-label="Configured-domain routing source"><code data-snippet="router">Loading source…</code></pre>
-          <p><code>RegistrationRuntime.Route</code> wraps that decision. If the initial route is external and registration is enabled, it checks whether a completed App02 organizational invitation has a current approved partner record for the domain.</p>
-          <p class="source-note"><a data-source-link="runtime" href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationServices.cs · RegistrationRuntime.Route</a></p>
-          <pre tabindex="0" aria-label="Approved-partner routing source"><code data-snippet="runtime">Loading source…</code></pre>
-          <div class="table-scroll"><table><thead><tr><th scope="col">Email domain / state</th><th scope="col">Sampleapp01</th><th scope="col">Sampleapp02</th></tr></thead><tbody>
-            <tr><td>Listed in <code>employeeDomains</code></td><td>Workforce</td><td>Workforce</td></tr>
-            <tr><td>Listed in <code>approvedPartnerDomains</code></td><td>External</td><td>Workforce</td></tr>
-            <tr><td>Redeemed organizational invitation + current saved partner approval</td><td>External</td><td>Workforce</td></tr>
-            <tr><td>Other valid domain, including an unconfigured Microsoft 365 organization</td><td>External</td><td>External from ordinary home login</td></tr>
-          </tbody></table></div>
-          <p><strong>Normal login does not query Microsoft to detect every Microsoft 365 tenant.</strong> Email is a routing hint. A user sent to workforce must still have the correct employee or B2B identity, signed app role and current approval.</p>
-          <details><summary>What makes a dynamically registered partner domain eligible?</summary><p><code>HasApprovedPartnerDomain</code> requires App02, a redeemed organizational invitation, the bound workforce identity and separate home tenant, and exactly one current matching partner approval. A pending invitation does not activate this route. A route for one domain grants no access to other users at that domain.</p><p class="source-note"><a data-source-link="partner-domain" href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistration.cs">Registration.cs · HasApprovedPartnerDomain</a></p><pre tabindex="0" aria-label="Dynamic partner domain conditions"><code data-snippet="partner-domain">Loading source…</code></pre><p>Explicit <code>approvedPartnerDomains</code> are administrator-provided routing hints and bypass this dynamic lookup. Final identity and approval checks still apply. Keep shared consumer domains such as Gmail out of employee and partner routing lists.</p></details>
+          <h3 id="decision-title">03 · The Graph result selects workforce or External ID</h3>
+          <p><code>RegistrationRuntime.RouteAsync</code> connects Sampleapp01's lookup to the existing workforce service identity. <code>WorkforceAccountResolver.ResolveAsync</code> validates the entered UPN and queries Microsoft Graph.</p>
+          <p class="source-note"><a data-source-link="runtime" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationServices.cs · RouteAsync</a></p>
+          <pre tabindex="0" aria-label="Async Sampleapp01 routing integration"><code data-snippet="runtime">Loading source…</code></pre>
+          <p class="source-note"><a data-source-link="resolver" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FWorkforceAccountResolver.cs">WorkforceAccountResolver.cs · ResolveAsync</a></p>
+          <pre tabindex="0" aria-label="Actual automatic workforce account resolution"><code data-snippet="resolver">Loading source…</code></pre>
+          <p>The query matches the complete UPN, not a domain suffix. The resolver checks the returned identifier and object ID. Only a successful, well-formed empty result selects External ID. A directory error, malformed response or multiple matches stops routing.</p>
+          <p>A matching disabled or guest account still selects workforce. Authentication and Sampleapp01's Employee role and approval requirements determine access. If an identifier exists in both directories, ordinary login chooses workforce; a dependent invitation remains bound to its external identity.</p>
         </section>
 
         <section id="authority" aria-labelledby="authority-title">
-          <h3 id="authority-title">03 · Startup connects the names to the tenant authorities</h3>
-          <p><code>Startup.Configure</code> loads private settings and calls <code>AddProvider</code> once for workforce and once for external. Both are passive providers: they redirect only when challenged by name.</p>
+          <h3 id="authority-title">04 · Startup connects each provider to its tenant</h3>
+          <p><code>Startup.Configure</code> loads private settings and calls <code>AddProvider</code> once for workforce and once for external. Both are passive providers: they redirect when challenged by name.</p>
           <p class="source-note"><a data-source-link="providers" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · provider registration</a></p>
           <pre tabindex="0" aria-label="Register the two authentication providers"><code data-snippet="providers">Loading source…</code></pre>
-          <p class="source-note"><a data-source-link="authority" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · AddProvider, partial excerpt</a></p>
+          <p class="source-note"><a data-source-link="authority" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · AddProvider</a></p>
           <pre tabindex="0" aria-label="Tenant authority and callback selection"><code data-snippet="authority">Loading source…</code></pre>
           <div class="table-scroll"><table><thead><tr><th scope="col">Selected name</th><th scope="col">MSAL authority</th><th scope="col">Protocol callback</th></tr></thead><tbody>
-            <tr><td><code>workforce</code></td><td><code>https://login.microsoftonline.com/&lt;workforce-tenant-id&gt;</code></td><td><code>/signin-workforce</code> in this sample</td></tr>
-            <tr><td><code>external</code></td><td><code>https://&lt;external-subdomain&gt;.ciamlogin.com/&lt;external-tenant-id&gt;</code></td><td><code>/signin-external</code> in this sample</td></tr>
+            <tr><td><code>workforce</code></td><td><code>https://login.microsoftonline.com/&lt;workforce-tenant-id&gt;</code></td><td><code>/signin-workforce</code></td></tr>
+            <tr><td><code>external</code></td><td><code>https://&lt;external-subdomain&gt;.ciamlogin.com/&lt;external-tenant-id&gt;</code></td><td><code>/signin-external</code></td></tr>
           </tbody></table></div>
-          <p>OWIN uses the authority with <code>/v2.0</code> appended and discovery supplies its authorization endpoint. Each provider uses its own client ID, server credential, expected issuer and callback. The callback names are sample choices; the full URL must match the app registration and middleware configuration. This sample's <code>ConfigurationLoader.Load</code> also enforces those two paths. To rename them, update that validation along with the configuration and registrations.</p>
-          <p>For an App02 B2B partner, the app starts at the workforce <em>resource tenant</em>. Entra handles authentication with the partner's home organization; the application receives the workforce resource-tenant token.</p>
+          <p>OWIN appends <code>/v2.0</code>; discovery supplies the authorization endpoint. Each provider has its own client ID, credential, expected issuer and callback. All resolved workforce accounts use the same workforce row above.</p>
+          <p>The full callback URL must match the app registration and middleware. The sample's <code>ConfigurationLoader.Load</code> enforces the two paths above. Renaming a callback also requires updating that validation.</p>
         </section>
 
         <section id="return" aria-labelledby="return-title">
-          <h3 id="return-title">04 · The callback validates identity before app access</h3>
+          <h3 id="return-title">05 · Validate identity and current Sampleapp01 approval</h3>
           <p>Microsoft returns an authorization code to the selected callback. The MSAL adapter redeems it with the protected PKCE verifier. Katana handles the protocol response and nonce; the strict token validator checks signature, expected issuer, audience and lifetime.</p>
-          <details><summary>MSAL code redemption and the sign-in validation hook</summary><p class="source-note"><a data-source-link="msal" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FMsalOpenIdConnect.cs">MsalOpenIdConnect.cs · partial excerpt</a></p><pre tabindex="0" aria-label="MSAL code redemption"><code data-snippet="msal">Loading source…</code></pre><p class="source-note"><a data-source-link="validation-hook" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · validated-token notification</a></p><pre tabindex="0" aria-label="Validated-token hook"><code data-snippet="validation-hook">Loading source…</code></pre></details>
-          <p><code>RegistrationSignInPolicy.Validate</code> sets <code>identity_source</code> from the actual provider, builds the stable subject key and checks admission. If a valid pending invitation matches the signed identity, it can issue a registration-only session for confirmation. That session cannot open business pages.</p>
-          <p><code>AdmissionPolicy.Evaluate</code> then checks the selected tenant against signed <code>tid</code>, <code>iss</code> and <code>aud</code>, finds a unique approval by app + <code>tid</code> + <code>oid</code>, and requires the signed persona role and current expiry. Dependents also require a current eligible linked employee.</p>
-          <details><summary>The identity and approval checks, plus App02 home-organization proof</summary><p class="source-note"><a data-source-link="admission" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs · AdmissionPolicy.Evaluate, partial excerpt</a></p><pre tabindex="0" aria-label="Identity and app approval checks"><code data-snippet="admission">Loading source…</code></pre><p>App02 partners must additionally have the expected signed <code>idp</code> claim. A discovery result or typed email cannot replace this proof.</p><p class="source-note"><a data-source-link="home-proof" href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs · partner home issuer, partial excerpt</a></p><pre tabindex="0" aria-label="Signed home organization check"><code data-snippet="home-proof">Loading source…</code></pre></details>
+          <details><summary>MSAL redemption and the sign-in validation hook</summary><p class="source-note"><a data-source-link="msal" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FMsalOpenIdConnect.cs">MsalOpenIdConnect.cs</a></p><pre tabindex="0" aria-label="MSAL code redemption"><code data-snippet="msal">Loading source…</code></pre><p class="source-note"><a data-source-link="validation-hook" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · validated-token notification</a></p><pre tabindex="0" aria-label="Validated-token hook"><code data-snippet="validation-hook">Loading source…</code></pre></details>
+          <p><code>RegistrationSignInPolicy.Validate</code> sets <code>identity_source</code> from the actual provider and checks admission. A valid pending invitation can permit a registration-only session for the matching signed identity; business pages remain gated.</p>
+          <p><code>AdmissionPolicy.Evaluate</code> verifies the configured tenant, issuer and audience, then finds one approval by <code>appId + tid + oid</code>. It requires the signed persona role and current approval expiry. The entered email and its suffix are not the approval key.</p>
+          <details><summary>Actual identity, role and approval checks</summary><p class="source-note"><a data-source-link="admission" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs · AdmissionPolicy.Evaluate</a></p><pre tabindex="0" aria-label="Identity and app approval checks"><code data-snippet="admission">Loading source…</code></pre></details>
+          <p>Employees require workforce + <code>Employee</code>. Retirees and other approved external personas require External ID and their assigned app role. Dependents also require a current eligible linked employee.</p>
         </section>
 
-        <section id="partners" aria-labelledby="partners-title">
-          <h3 id="partners-title">05 · Microsoft 365 discovery happens during invitation</h3>
-          <p>In App02, an approved workforce Employee with <code>admin</code> invites a business contact. <code>InviteAsync</code> calls <code>ResolveOrganizationAsync</code> to classify the recipient domain. Known personal domains such as Gmail and Hotmail skip organizational discovery.</p>
-          <p class="source-note"><a data-source-link="discovery" href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationServices.cs · ResolveOrganizationAsync</a></p>
-          <pre tabindex="0" aria-label="Invitation-time Microsoft organization discovery"><code data-snippet="discovery">Loading source…</code></pre>
-          <ul>
-            <li>A recognized separate organizational tenant selects B2B onboarding in workforce and the App02 <code>Partner</code> role.</li>
-            <li>A personal contact selects customer provisioning in External ID and the target app's <code>External</code> role. A dependent invitation uses <code>Dependent</code>; organizational addresses are rejected for that purpose.</li>
-            <li>The discovery result is a candidate tenant. It proves neither this person's membership nor a Microsoft 365 licence. Signed home-issuer proof and confirmed app approval are required later.</li>
-            <li>A discovery service error stops the invitation; it does not silently reclassify the account.</li>
-          </ul>
-          <details><summary>How the invitation selects the first sign-in provider</summary><p>The server records the invitation's bound source and recipient identity. <code>RegistrationController.Begin</code> challenges that source directly. This lets the first partner use workforce before their redeemed approval activates normal home-page domain routing.</p><p class="source-note"><a data-source-link="invitation-begin" href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs · Begin</a></p><pre tabindex="0" aria-label="Bound invitation sign-in challenge"><code data-snippet="invitation-begin">Loading source…</code></pre><p>After confirmation, the saved partner approval can activate the dynamic App02 domain route. New personal recipients verify email and create a password, then use the bound external provider and confirm registration. Existing recipients can sign in with their existing account before confirmation.</p></details>
-          <p>Sampleapp01 has no organizational partner registration or admission. Its employee/dependent flow uses workforce for the sponsor and External ID for the dependent.</p>
+        <section id="dependent" aria-labelledby="dependent-title">
+          <h3 id="dependent-title">06 · A dependent invitation selects its bound external identity</h3>
+          <p>An approved Employee with current benefit eligibility opens <strong>Invite someone</strong> in Sampleapp01, enters the dependent's personal email and confirms the relationship. The service provisions or reuses the external customer, assigns <code>Dependent</code> for this app and sends a secure, expiring invitation.</p>
+          <p>A new recipient verifies email and creates a password through the invitation. An existing recipient can use existing-account sign-in. <code>RegistrationController.Begin</code> challenges the invitation's stored source directly; the employee's own UPN suffix does not control the dependent's route.</p>
+          <p class="source-note"><a data-source-link="invitation-begin" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs · Begin</a></p>
+          <pre tabindex="0" aria-label="Bound dependent invitation sign-in challenge"><code data-snippet="invitation-begin">Loading source…</code></pre>
+          <p>The signed-in identity must match the invitation. Confirmation refreshes sponsor checks, consumes the link once and records Sampleapp01 approval. Fresh sign-in then permits benefits if the role, approval and linked employee are still eligible.</p>
+          <details><summary>Dependent access uses the employee's stable identity</summary><p class="source-note"><a data-source-link="dependent-admission" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs · dependent admission</a></p><pre tabindex="0" aria-label="Dependent stable employee link checks"><code data-snippet="dependent-admission">Loading source…</code></pre><p>The link uses <code>LinkedEmployeeTenantId</code> and <code>LinkedEmployeeObjectId</code>. A UPN rename on that same account does not move the dependent to another sponsor.</p></details>
         </section>
 
         <section id="failure" aria-labelledby="failure-title">
-          <h3 id="failure-title">06 · An authentication failure stays in the selected realm</h3>
-          <p>The failure handler redirects to <code>/Account/Failure</code>. It never issues a challenge to the other provider. A wrong password, missing assignment, expired approval or Conditional Access denial is resolved at the selected boundary.</p>
-          <p class="source-note"><a data-source-link="failure" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · AuthenticationFailed, partial excerpt</a></p>
+          <h3 id="failure-title">07 · A failed sign-in stays in the selected realm</h3>
+          <p>The failure handler redirects to <code>/Account/Failure</code>. It never challenges the other provider. Initial lookup failure returns HTTP 503 before sign-in. Once workforce is selected, resolve credentials, assignments and sign-in policy in that directory.</p>
+          <p class="source-note"><a data-source-link="failure" href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs · AuthenticationFailed</a></p>
           <pre tabindex="0" aria-label="Failure handler without realm fallback"><code data-snippet="failure">Loading source…</code></pre>
-          <p>The workforce tenant's Custom SAML/WS-Fed provider does not replace this application routing code or make workforce search our customer directory after a failed sign-in.</p>
+          <p>Adding a workforce Custom SAML/WS-Fed identity provider does not make this app search the customer directory after authentication fails.</p>
         </section>
 
         <section id="change-map" aria-labelledby="change-map-title">
-          <h3 id="change-map-title">07 · Where the developer changes this in an existing app</h3>
-          <div class="table-scroll"><table><thead><tr><th scope="col">Existing location</th><th scope="col">Change</th><th scope="col">Sample reference</th></tr></thead><tbody>
-            <tr><td>Private server configuration</td><td>Employee / approved partner domains, two tenants, clients, exact issuers and callbacks</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FConfiguration.cs">Configuration.cs</a></td></tr>
+          <h3 id="change-map-title">08 · Where the developer changes Sampleapp01</h3>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Location</th><th scope="col">Change</th><th scope="col">Source reference</th></tr></thead><tbody>
+            <tr><td>Private configuration / Graph service identity</td><td>Keep one workforce and one external client. Supply the approved workforce Graph reader; no employee-domain list is required for this app's login.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FConfiguration.cs">Configuration.cs</a> + <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationServices.cs</a></td></tr>
             <tr><td>Login POST or page event</td><td>Choose the source and challenge its provider</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FControllers.cs">AccountController.Login</a></td></tr>
-            <tr><td>Routing service</td><td>Exact domain routing; App02-only approved partner overlay</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">IdentityRouter</a> + <a href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationRuntime</a></td></tr>
-            <tr><td>OWIN Startup.Auth</td><td>Register both passive providers, MSAL code redemption and the shared cookie</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs</a></td></tr>
-            <tr><td>Registration endpoints</td><td>Discover business contacts; bind invitations; challenge their stored source</td><td><a href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs</a></td></tr>
-            <tr><td>Token validation / protected requests</td><td>Verify realm, signed identity and role; enforce current app approval and sponsor rules</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">AdmissionPolicy</a></td></tr>
+            <tr><td>Routing service</td><td>Look up the exact workforce UPN; reject failed or ambiguous lookups before selecting a provider</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FWorkforceAccountResolver.cs">WorkforceAccountResolver.cs</a> + <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationRuntime.RouteAsync</a></td></tr>
+            <tr><td>OWIN Startup.Auth</td><td>Register both passive providers, MSAL redemption and the shared cookie</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs</a></td></tr>
+            <tr><td>Dependent registration endpoints</td><td>Bind the invitation to the recipient and stored source; require confirmation</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs</a></td></tr>
+            <tr><td>Protected requests</td><td>Require signed identity/role, current approval and dependent eligibility by stable IDs</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">AdmissionPolicy</a></td></tr>
           </tbody></table></div>
-          <p><a href="migration-sampleapp01.html">Full Sampleapp01 migration guide</a> · <a href="entra-setup.html">Entra configuration guide</a> · <a href="source/net48-source.zip">Download source and scripts</a></p>
+          <p>Validate approved employees from different workforce UPN domains without configuring those suffixes in the app. Test a dependent, a disabled account and a failed Graph lookup separately. Confirm employees receive the same workforce <code>tid</code> and audience, while the dependent receives the external tenant's token.</p>
+          <p><a href="migration-sampleapp01.html">Sampleapp01 migration guide</a> · <a href="source/SAMPLEAPP01-IMPLEMENTATION-HANDOFF.md" download>Sampleapp01 developer handoff (.md)</a> · <a href="source/net48-source.zip">Download source and scripts</a></p>
         </section>
       </article>
     </main>
