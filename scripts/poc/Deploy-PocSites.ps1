@@ -69,16 +69,16 @@ foreach ($appId in @('sampleapp01','sampleapp02')) {
 $driver = Join-Path $stageRoot 'driver'
 New-Item -ItemType Directory -Path "$driver\source" -Force | Out-Null
 Copy-Item -LiteralPath "$repoRoot\docs\poc\SAMPLEAPP01-IMPLEMENTATION-HANDOFF.md" -Destination "$driver\source\SAMPLEAPP01-IMPLEMENTATION-HANDOFF.md"
-Copy-Item -LiteralPath "$repoRoot\driver\index.html","$repoRoot\driver\site.css","$repoRoot\driver\site.js","$repoRoot\driver\code-samples.js","$repoRoot\driver\web.config","$repoRoot\driver\migration-sampleapp01.html","$repoRoot\driver\entra-setup.html","$repoRoot\driver\migration.css" -Destination $driver
+Copy-Item -LiteralPath "$repoRoot\driver\index.html","$repoRoot\driver\site.css","$repoRoot\driver\site.js","$repoRoot\driver\code-samples.js","$repoRoot\driver\web.config","$repoRoot\driver\migration-sampleapp01.html","$repoRoot\driver\entra-setup.html","$repoRoot\driver\login-routing.html","$repoRoot\driver\login-routing.js","$repoRoot\driver\migration.css" -Destination $driver
 $driverHtml = [IO.File]::ReadAllText((Join-Path $driver 'index.html'))
 foreach ($asset in @('site.css','site.js','code-samples.js')) {
     $version = (Get-FileHash -LiteralPath (Join-Path $driver $asset) -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,16)
     $driverHtml = $driverHtml.Replace('"' + $asset + '"', '"' + $asset + '?v=' + $version + '"')
 }
 [IO.File]::WriteAllText((Join-Path $driver 'index.html'), $driverHtml, [Text.UTF8Encoding]::new($false))
-foreach ($guidePage in @('migration-sampleapp01.html','entra-setup.html')) {
+foreach ($guidePage in @('migration-sampleapp01.html','entra-setup.html','login-routing.html')) {
     $guideHtml = [IO.File]::ReadAllText((Join-Path $driver $guidePage))
-    foreach ($asset in @('site.css','migration.css')) {
+    foreach ($asset in @('site.css','migration.css','code-samples.js','login-routing.js')) {
         $version = (Get-FileHash -LiteralPath (Join-Path $driver $asset) -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,16)
         $guideHtml = $guideHtml.Replace('"' + $asset + '"', '"' + $asset + '?v=' + $version + '"')
     }
