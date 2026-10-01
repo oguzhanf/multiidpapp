@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Onsite setup and verification for two ASP.NET .NET Framework 4.8 applications using Microsoft Entra workforce and External ID.">
+  <title>Two-tenant .NET 4.8 PoC driver</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="site.css">
+  <script src="code-samples.js" defer></script>
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#step-title">Skip to current content</a>
+  <header class="site-header">
+    <div class="heading"><span class="product-mark" aria-hidden="true">01 / 02</span><div><h1>Two-tenant .NET 4.8 PoC</h1><p>ASP.NET · IIS · OWIN OpenID Connect · direct MSAL.NET</p></div></div>
+    <button id="print-button" class="secondary" type="button">Print runbook</button>
+  </header>
+  <div class="workspace">
+    <aside class="rail">
+      <nav aria-label="Architecture and onsite steps"><button id="architecture-nav" class="rail-overview" type="button" aria-controls="architecture-view" aria-current="page">Architecture<span>Identity, hosting and registration</span></button><ol id="step-nav"></ol></nav>
+      <div class="rail-progress"><strong id="progress-count">0 checkpoints</strong><progress id="progress-meter" max="1" value="0" aria-label="Completed checkpoints"></progress><p>Check only what you verified.</p><button id="reset-progress" class="text-button" type="button">Reset this app's progress</button></div>
+    </aside>
+    <main id="main">
+      <div class="app-tools">
+        <div class="app-switch" role="tablist" aria-label="Application">
+          <button id="tab-app01" role="tab" type="button" aria-controls="app-panel" aria-selected="true" data-app="sampleapp01">Sampleapp01<span>Employees, retirees, dependents</span></button>
+          <button id="tab-app02" role="tab" type="button" aria-controls="app-panel" aria-selected="false" tabindex="-1" data-app="sampleapp02">Sampleapp02<span>Also approved M365 partners</span></button>
+        </div>
+        <div class="view-actions" aria-label="Driver views"><button id="architecture-button" class="secondary" type="button" aria-controls="architecture-view" aria-pressed="true">Architecture</button><button id="runbook-button" class="secondary" type="button" aria-controls="runbook-view" aria-pressed="false">Runbook</button><button id="code-button" class="secondary" type="button" aria-controls="code-view" aria-pressed="false">Code samples</button></div>
+      </div>
+      <nav class="application-launcher" aria-label="Open PoC applications">
+        <div class="application-card">
+          <h2>Sampleapp01</h2><p>Employees, retirees and dependents</p>
+          <a id="launch-sampleapp01" class="application-open" href="https://caldova-sampleapp01-07279263.azurewebsites.net/" target="_blank" rel="noopener noreferrer">Open Sampleapp01</a>
+          <div class="application-links"><a id="register-sampleapp01" href="https://caldova-sampleapp01-07279263.azurewebsites.net/Registration/Index" target="_blank" rel="noopener noreferrer">Register users</a><a id="code-sampleapp01" href="https://caldova-sampleapp01-07279263.azurewebsites.net/Home/Code" target="_blank" rel="noopener noreferrer">Application code</a></div>
+        </div>
+        <div class="application-card">
+          <h2>Sampleapp02</h2><p>Employees, dependents and approved partners</p>
+          <a id="launch-sampleapp02" class="application-open" href="https://caldova-sampleapp02-07279263.azurewebsites.net/" target="_blank" rel="noopener noreferrer">Open Sampleapp02</a>
+          <div class="application-links"><a id="register-sampleapp02" href="https://caldova-sampleapp02-07279263.azurewebsites.net/Registration/Index" target="_blank" rel="noopener noreferrer">Register users</a><a id="code-sampleapp02" href="https://caldova-sampleapp02-07279263.azurewebsites.net/Home/Code" target="_blank" rel="noopener noreferrer">Application code</a></div>
+        </div>
+        <p class="application-launcher-note">Sign in to the app first to invite users. Registration requires the employee role and the app's assigned permissions.</p>
+      </nav>
+      <div id="app-panel" role="tabpanel" aria-labelledby="tab-app01">
+        <section id="architecture-view" class="architecture-view" aria-labelledby="architecture-title">
+          <h2 id="architecture-title" tabindex="-1">Architecture</h2>
+          <p class="step-intro">Two applications, two identity directories, explicit approval for each app. Select a diagram node to inspect its design choice.</p>
+          <div class="architecture-tabs" role="tablist" aria-label="Architecture flow"><button id="architecture-signin-tab" role="tab" aria-selected="true" aria-controls="architecture-signin" data-flow="signin" type="button">Sign-in and access</button><button id="architecture-registration-tab" role="tab" aria-selected="false" aria-controls="architecture-registration" data-flow="registration" tabindex="-1" type="button">Registration flow <span class="pending-label">Recipient test pending</span></button></div>
+          <div id="architecture-signin" role="tabpanel" aria-labelledby="architecture-signin-tab">
+            <div class="architecture-boundary"><button class="boundary-title" type="button" data-choice="hosting" aria-controls="architecture-detail">Oguzhan · one PoC resource group · Windows B1 · IIS / .NET Framework 4.8</button>
+              <div class="diagram-headings" aria-hidden="true"><span>Identity</span><span>Directory and onboarding</span><span>Application entry</span></div>
+              <div class="identity-routes" aria-label="Identity routing diagram">
+                <div class="identity-route workforce-route"><button class="diagram-node" type="button" data-choice="identities" aria-controls="architecture-detail"><strong>Caldova employees</strong><small>Organizational workforce account</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="workforce" aria-controls="architecture-detail"><strong>Caldova workforce tenant</strong><small>Resource tenant · signed Employee role</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="applications" aria-controls="architecture-detail"><strong>App01 + App02</strong><small>Separate workforce OIDC client per app</small></button></div>
+                <div class="identity-route partner-route"><button class="diagram-node" type="button" data-choice="partners" aria-controls="architecture-detail"><strong>Other M365 organizations</strong><small>Approved organization + sponsor</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="partners" aria-controls="architecture-detail"><strong>B2B guest in Caldova</strong><small>Home sign-in · verified signed home issuer</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="partners" aria-controls="architecture-detail"><strong>App02 only</strong><small>Partner role · app01 has no Partner access</small></button></div>
+                <div class="identity-route external-route"><button class="diagram-node" type="button" data-choice="external" aria-controls="architecture-detail"><strong>Retirees and dependents</strong><small>Personal customer identities</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="external" aria-controls="architecture-detail"><strong>Dedicated External ID tenant</strong><small>Controlled sign-in · assigned customer users</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="applications" aria-controls="architecture-detail"><strong>App01 / App02</strong><small>Separate external OIDC client per app</small></button></div>
+              </div>
+              <p class="diagram-connector"><span aria-hidden="true">↓</span> Four demo registrations · two OIDC schemes per app · distinct tenant, audience and callbacks</p>
+              <div class="security-pipeline" aria-label="Shared authentication pipeline"><button class="diagram-node" type="button" data-choice="msal" aria-controls="architecture-detail"><strong>Code + PKCE S256</strong><small>OWIN state → direct MSAL redemption</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="tokens" aria-controls="architecture-detail"><strong>Strict signed-token validation</strong><small>Signature · issuer/aud · tid/oid · roles · nonce</small></button><span class="diagram-arrow" aria-hidden="true">→</span><button class="diagram-node" type="button" data-choice="cookie" aria-controls="architecture-detail"><strong>Separate app cookie</strong><small>Secure · HttpOnly · Lax · 20 minutes</small></button></div>
+              <p class="diagram-connector"><span aria-hidden="true">↓</span> Identity authentication → application authorization on every protected request</p>
+              <button class="diagram-node governance-node" type="button" data-choice="governance" aria-controls="architecture-detail"><strong>Signed role + app-local approval + benefit rules</strong><small>App + tenant/object identity · sponsor · approved status · expiry · dependent link to current eligible employee</small></button>
+              <div class="architecture-support"><button class="diagram-node" type="button" data-choice="driver" aria-controls="architecture-detail"><strong>Separate operator driver</strong><small>Fifth registration · EasyAuth · Caldova object-ID allowlist · all URLs gated</small></button><button class="diagram-node" type="button" data-choice="private" aria-controls="architecture-detail"><strong>Private server state</strong><small>Secrets / real records stay private · public source pages in demos · driver source gated</small></button></div>
+              <p class="migration-note">Kerberos entry point → OIDC claims. Downstream Windows impersonation or delegation remains a separate migration decision.</p>
+            </div>
+          </div>
+          <div id="architecture-registration" role="tabpanel" aria-labelledby="architecture-registration-tab" hidden>
+            <p class="pending-notice"><strong>Implemented and configured; live verification pending.</strong> Live managed-email delivery, customer password setup and invitation redemption are not yet confirmed.</p>
+            <div class="architecture-boundary registration-diagram" aria-label="Planned employee registration and invitation flow">
+              <div class="registration-permissions"><button class="diagram-node" type="button" data-choice="registration" aria-controls="architecture-detail"><strong>App01 dependent registration</strong><small>Approved Caldova workforce Employee</small></button><button class="diagram-node" type="button" data-choice="registration" aria-controls="architecture-detail"><strong>App02 dependent registration</strong><small>Employee + signed admin or dependentRegistrant</small></button><button class="diagram-node" type="button" data-choice="registration" aria-controls="architecture-detail"><strong>App02 vendor / partner section</strong><small>Employee + signed admin only</small></button></div>
+              <p class="diagram-connector"><span aria-hidden="true">↓</span> Caldova employees only; partner and external identities receive no registration capability</p>
+              <button class="diagram-node" type="button" data-choice="invitation" aria-controls="architecture-detail"><strong>Server creates a scoped, 24-hour invitation</strong><small>Earlier approval deadline applies · bound recipient · sponsor / employee link · one-use redemption</small></button>
+              <p class="diagram-connector"><span aria-hidden="true">↓</span> Account type follows the approved identity design; email text does not prove an M365 organization</p>
+              <div class="invitation-branches"><div class="invitation-branch external-route"><button class="diagram-node" type="button" data-choice="personal-invitation" aria-controls="architecture-detail"><strong>Personal email</strong><small>Secure one-use invitation</small></button><span class="vertical-arrow" aria-hidden="true">↓</span><button class="diagram-node" type="button" data-choice="email" aria-controls="architecture-detail"><strong>Azure managed email sender</strong><small>Configured sender · delivery verification pending</small></button><span class="vertical-arrow" aria-hidden="true">↓</span><button class="diagram-node" type="button" data-choice="personal-invitation" aria-controls="architecture-detail"><strong>Verify email ? create password</strong><small>Separate native setup client ? Microsoft email verification</small></button><span class="vertical-arrow" aria-hidden="true">?</span><button class="diagram-node" type="button" data-choice="personal-invitation" aria-controls="architecture-detail"><strong>External ID customer identity</strong><small>Target-app role + sponsored approval; dependent eligibility still enforced</small></button></div><div class="invitation-branch partner-route"><button class="diagram-node" type="button" data-choice="b2b-invitation" aria-controls="architecture-detail"><strong>Verified Microsoft 365 organization</strong><small>Approved home tenant and sponsor</small></button><span class="vertical-arrow" aria-hidden="true">↓</span><button class="diagram-node" type="button" data-choice="b2b-invitation" aria-controls="architecture-detail"><strong>Microsoft Graph B2B invitation</strong><small>One call · sendInvitationMessage=false · bound guest</small></button><span class="vertical-arrow" aria-hidden="true">↓</span><button class="diagram-node" type="button" data-choice="email" aria-controls="architecture-detail"><strong>Azure managed email sender</strong><small>Native Microsoft inviteRedeemUrl · delivery pending</small></button><span class="vertical-arrow" aria-hidden="true">↓</span><button class="diagram-node" type="button" data-choice="b2b-invitation" aria-controls="architecture-detail"><strong>App02 organizational partner</strong><small>Partner role + verified signed home issuer + current approval</small></button></div></div>
+              <p class="migration-note">Pending live validation: sending an invitation does not itself establish identity, employee relationship or benefit eligibility.</p>
+            </div>
+          </div>
+          <section id="architecture-detail" class="architecture-detail" aria-labelledby="architecture-choice-title" aria-live="polite"><h3 id="architecture-choice-title"></h3><div id="architecture-choice-body"></div><button id="architecture-choice-source" class="text-button" type="button" hidden>Read source</button></section>
+          <details class="architecture-map"><summary>Registration, access and hosting map</summary><div class="table-scroll"><table><thead><tr><th scope="col">Component</th><th scope="col">Recorded choice</th></tr></thead><tbody><tr><td>App01 workforce / external</td><td>Two tenant-specific demo registrations; Employee plus approved Retiree / Dependent / External. No Partner.</td></tr><tr><td>App02 workforce / external</td><td>Two tenant-specific demo registrations; same personas plus workforce B2B Partner.</td></tr><tr><td>Driver</td><td>Separate workforce registration and App Service EasyAuth; object-ID allowlist, initially the approved operator; every page, catalog and download gated.</td></tr><tr><td>Hosting / private state</td><td>Oguzhan, one isolated PoC resource group, Windows B1 in Sweden Central, classic IIS/System.Web net48; dedicated external directory resource. Credentials and real records are excluded from displayed source.</td></tr><tr><td>New registration workflow</td><td>Implemented; configured and pending live validation: employee capabilities, 24-hour one-use invitations, ACS sender and native verified-organization B2B redemption.</td></tr></tbody></table></div></details>
+          <div class="code-actions"><button id="architecture-runbook" class="secondary" type="button">Continue to runbook</button><button id="architecture-code" class="text-button" type="button">Read application code</button></div>
+        </section>
+        <div id="runbook-view" hidden>
+        <div class="mobile-nav"><label for="step-select">Jump to step</label><select id="step-select"></select></div>
+        <details id="values-panel" class="values-panel">
+          <summary>Application values <span id="values-summary">Synthetic defaults · edit before setup</span></summary>
+          <p>These are non-secret setup values. Saved in this browser only. Do not enter credentials, passwords, tokens, or personal records.</p>
+          <div class="lab-actions"><button id="load-lab" class="secondary" type="button">Load hosted lab setup</button><a id="open-demo" href="https://localhost:44371" target="_blank" rel="noopener noreferrer">Open selected demo</a></div>
+          <form id="values-form">
+            <div class="field"><label for="base-url">HTTPS application base URL</label><input id="base-url" name="baseUrl" type="url" required spellcheck="false" autocomplete="off"><small>Use the actual IIS origin, without a path. Callbacks are derived from this URL.</small></div>
+            <fieldset><legend>Workforce directory</legend><div class="field-row"><div class="field"><label for="workforce-tenant">Tenant ID</label><input id="workforce-tenant" name="workforceTenantId" required spellcheck="false" autocomplete="off"></div><div class="field"><label for="workforce-client">Application (client) ID</label><input id="workforce-client" name="workforceClientId" required spellcheck="false" autocomplete="off"></div></div><div class="field"><label for="workforce-issuer">Expected issuer</label><input id="workforce-issuer" name="workforceIssuer" type="url" required spellcheck="false" autocomplete="off"><small>Copy the exact issuer from this tenant's discovery metadata.</small></div><div class="field"><label for="employee-domains">Employee routing domains</label><input id="employee-domains" name="employeeDomains" required spellcheck="false" autocomplete="off"><small>Comma separated. Routing is a hint; verified tokens and entitlements decide access.</small></div><div id="partner-field" class="field"><label for="partner-domains">Approved partner routing domains</label><input id="partner-domains" name="approvedPartnerDomains" spellcheck="false" autocomplete="off"><small>App02 only. Add a route after verifying and onboarding the home organization.</small></div></fieldset>
+            <fieldset><legend>External ID directory</legend><div class="field-row"><div class="field"><label for="external-tenant">Tenant ID</label><input id="external-tenant" name="externalTenantId" required spellcheck="false" autocomplete="off"></div><div class="field"><label for="external-client">Application (client) ID</label><input id="external-client" name="externalClientId" required spellcheck="false" autocomplete="off"></div></div><div class="field"><label for="ciam-domain">CIAM login hostname</label><input id="ciam-domain" name="ciamDomain" required spellcheck="false" autocomplete="off"><small>For example, your-subdomain.ciamlogin.com; use the tenant's actual hostname.</small></div><div class="field"><label for="external-issuer">Expected issuer</label><input id="external-issuer" name="externalIssuer" type="url" required spellcheck="false" autocomplete="off"><small>Verify in External ID discovery metadata. Do not infer it from the workforce issuer.</small></div></fieldset>
+            <div class="form-actions"><button type="submit">Save application values</button><span id="values-status" role="status"></span></div>
+          </form>
+        </details>
+        <article id="active-step" aria-labelledby="step-title"></article>
+        <div class="step-controls"><button id="previous-step" class="secondary" type="button">Previous step</button><span id="step-position"></span><button id="next-step" type="button">Next step</button></div>
+        </div>
+        <section id="code-view" class="code-view" aria-labelledby="code-title" hidden>
+          <h2 id="code-title" tabindex="-1">Code samples</h2>
+          <p class="step-intro">Actual application files and the shared authentication source. Select one file to read.</p>
+          <section aria-labelledby="journey-heading" class="callout">
+            <h3 id="journey-heading">Follow an interaction</h3>
+            <label for="code-journey">Registration, login and authorization</label>
+            <select id="code-journey"></select>
+            <p id="code-journey-summary"></p>
+            <ol id="code-journey-steps"></ol>
+          </section>
+          <div class="code-actions"><button id="back-runbook" class="secondary" type="button">Back to runbook</button><a id="code-download" href="./source/net48-source.zip" download>Download source ZIP</a></div>
+          <p id="code-unavailable" class="callout" hidden>Code samples are unavailable in this copy. Download the source ZIP or use a complete offline copy.</p>
+          <div id="code-reader">
+            <div class="field code-file-field"><label for="code-file">Source file</label><select id="code-file"></select></div>
+            <h3 class="code-filename"><code id="code-path"></code></h3>
+            <p id="code-purpose" class="source-note"></p>
+            <div class="code-block actual-source"><div class="code-toolbar"><span id="code-language"></span><button id="copy-source" class="copy-button" type="button">Copy file</button></div><pre tabindex="0"><code id="code-content"></code></pre></div>
+          </div>
+        </section>
+      </div>
+      <div id="print-runbook"></div>
+      <footer>Portable driver · synthetic defaults · hosted pages and downloads require approved Caldova sign-in. No tenant operations run from this page.</footer>
+    </main>
+  </div>
+  <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">Enable JavaScript to use the runbook and code samples. A complete local copy uses local assets; the hosted driver requires approved Caldova sign-in.</p></noscript>
+</body>
+</html>

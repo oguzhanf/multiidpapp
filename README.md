@@ -1,5 +1,13 @@
 # MultiIdpApp
 
+## Customer PoC: ASP.NET on .NET Framework 4.8
+
+Use [the onsite driver](driver/index.html) and [the IIS samples](samples/net48/README.md) for the customer session. `sampleapp01` supports employees and approved retirees/dependents. `sampleapp02` adds approved Microsoft 365 partners through workforce B2B. Both use shared OWIN OpenID Connect and direct MSAL.NET code, with separate registrations in the workforce and External ID tenants.
+
+[PoC setup scripts](scripts/poc/README.md) create targeted registrations, consent, assignments and local configuration. [The design](docs/poc/DESIGN.md) records the identity and entitlement boundaries. The ASP.NET Core sample below remains an architectural reference.
+
+## ASP.NET Core reference
+
 One ASP.NET Core Razor Pages application authenticating against two independent Microsoft Entra identity providers:
 
 - **Workforce tenant** for workforce accounts.

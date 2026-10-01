@@ -3,6 +3,7 @@
 .vs/
 .idea/
 .vscode/
+.playwright-mcp/
 TestResults/
 artifacts/
 publish/

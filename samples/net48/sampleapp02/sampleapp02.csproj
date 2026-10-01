@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>sampleapp02</AssemblyName>
+    <DefineConstants>$(DefineConstants);SAMPLEAPP02</DefineConstants>
+  </PropertyGroup>
+</Project>
