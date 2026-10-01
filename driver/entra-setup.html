@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Step-by-step Entra External ID and workforce configuration for the two-tenant ASP.NET Framework 4.8 PoC, including roles, invitations, password setup and access checks.">
+  <title>Configure Entra · PoC setup guide</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="migration.css">
+</head>
+<body class="migration-page entra-page">
+  <a class="skip-link" href="#setup-content">Skip to Entra setup guide</a>
+  <header class="site-header">
+    <div class="heading"><span class="product-mark" aria-hidden="true">SETUP</span><div><h1>Configure Entra</h1><p>External ID first · workforce next · application access last</p></div></div>
+    <a class="secondary" href="index.html">Back to driver</a>
+  </header>
+  <div class="workspace">
+    <aside class="rail">
+      <nav aria-label="Entra configuration steps">
+        <a class="rail-overview" href="#setup-content">Setup order and inputs</a>
+        <ol>
+          <li><a href="#external-tenant">External ID tenant</a></li>
+          <li><a href="#inventory">Record the identifiers</a></li>
+          <li><a href="#external-apps">External web registrations</a></li>
+          <li><a href="#external-roles">External roles and assignment</a></li>
+          <li><a href="#user-flow">Controlled customer user flow</a></li>
+          <li><a href="#workforce-apps">Workforce web registrations</a></li>
+          <li><a href="#employee-access">Employee roles and approval</a></li>
+          <li><a href="#partner-access">App02 organizational B2B</a></li>
+          <li><a href="#services">Registration service identities</a></li>
+          <li><a href="#email">Azure-managed invitation email</a></li>
+          <li><a href="#password-setup">Verify email and create password</a></li>
+          <li><a href="#policies">Sign-in policies and MFA</a></li>
+          <li><a href="#application-config">Connect the .NET 4.8 apps</a></li>
+          <li><a href="#driver-access">Protect the driver</a></li>
+          <li><a href="#validation">Run the acceptance checks</a></li>
+        </ol>
+        <a class="rail-overview" href="#automation">Repository setup order</a>
+        <a class="rail-overview" href="migration-sampleapp01.html">Modify an existing app</a>
+      </nav>
+    </aside>
+    <main>
+      <article id="setup-content">
+        <h2>From tenant setup to an approved login</h2>
+        <p>Follow the steps in order. Each step names the directory, the setting and the result to check. If the customer already has an External ID tenant, verify it in step 01 and continue with its app registrations.</p>
+        <p class="source-note">This is the configuration for the implementation in this driver. The four web clients use OWIN + MSAL authorization code with PKCE. Personal identities use the external tenant; employees and App02 organizational guests use the workforce tenant.</p>
+        <div class="setup-start"><strong>Have ready</strong><p>Administrator access in both directories; an approved Azure subscription and one PoC resource group; HTTPS origins for both apps and the driver; approved employee test accounts, partner home tenant and recipient emails; an access expiry and benefit-eligibility rule.</p><p>In the Caldova lab, hosting and email are in <strong>Oguzhan</strong> / <code>rg-caldova-multiidp-poc</code>. Use the customer's approved equivalents onsite. Full scripted setup uses a delegated Global Administrator in each tenant and Azure rights to create resources, custom roles and role assignments. A workforce Global Administrator does not automatically have those Azure permissions.</p></div>
+        <nav class="migration-toc" aria-label="Jump to setup"><a href="#external-tenant">Tenant</a><a href="#external-apps">External apps</a><a href="#workforce-apps">Workforce apps</a><a href="#employee-access">Roles</a><a href="#services">Services</a><a href="#password-setup">Password setup</a><a href="#validation">Checks</a><a href="#automation">Scripts</a></nav>
+
+        <section id="external-tenant" aria-labelledby="external-tenant-title">
+          <h3 id="external-tenant-title">01 · Create or verify the External ID tenant</h3>
+          <p class="setup-context">Directory: workforce for creation → external for configuration</p>
+          <ol>
+            <li>Open <a href="https://entra.microsoft.com/" target="_blank" rel="noopener noreferrer">Microsoft Entra admin center</a>. Go to <strong>Entra ID → Overview → Manage tenants → Create</strong>.</li>
+            <li>Select <strong>External</strong>. For subscription-backed setup, select <strong>Use Azure Subscription</strong>, enter the tenant name, initial domain and agreed country/region.</li>
+            <li>Select the approved subscription and the same PoC resource group used for hosting. Review and create; wait for provisioning to finish.</li>
+            <li>Switch directory through <strong>Directories + subscriptions</strong>. On the external tenant's Overview page, record its tenant ID and primary domain. Confirm the customer controls administration, billing and ownership.</li>
+          </ol>
+          <p>If the tenant already exists, start at item 4. Use an External ID <em>external tenant</em> for customer accounts. The third party's legacy B2C tenant is outside this setup.</p>
+          <p class="setup-check"><strong>Check:</strong> the selected directory is the customer external tenant and its ID differs from the workforce tenant.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-create-external-tenant-portal">Microsoft: create and switch to an external tenant</a></p>
+        </section>
+
+        <section id="inventory" aria-labelledby="inventory-title">
+          <h3 id="inventory-title">02 · Record the identifiers before configuring apps</h3>
+          <p class="setup-context">Directory: both · storage: private setup inventory</p>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Value</th><th scope="col">Where to obtain it</th><th scope="col">Used for</th></tr></thead><tbody>
+            <tr><td>Workforce / external tenant ID</td><td>Each tenant's Overview</td><td>Authority and tenant validation</td></tr>
+            <tr><td>External initial domain / CIAM hostname</td><td>External Overview; <code>&lt;subdomain&gt;.ciamlogin.com</code></td><td>External authority and customer provisioning</td></tr>
+            <tr><td>App01 / App02 HTTPS origins</td><td>Existing IIS host or App Service default domain</td><td>Exact redirect URIs and invitation return URLs</td></tr>
+            <tr><td>Client ID + application object ID</td><td>App registrations → each app → Overview</td><td>Client configuration / editing the registration</td></tr>
+            <tr><td>Enterprise app object ID + role IDs</td><td>Enterprise applications → each app; app role definitions</td><td>Role assignments to that application</td></tr>
+            <tr><td>Employee / customer / guest object IDs</td><td>Users in the directory containing that identity</td><td>Stable user mapping and app approval</td></tr>
+            <tr><td>Partner home tenant ID / domains</td><td>Approved partner administrator and verified organization discovery</td><td>App02 organizational routing and signed home-issuer checks</td></tr>
+          </tbody></table></div>
+          <p>Label every value with its tenant and application. A client ID, enterprise app object ID and user object ID are different identifiers. Keep credentials, recipient records and invitation links in private server storage.</p>
+          <p class="setup-check"><strong>Check:</strong> you can identify all four interactive registrations separately: App01 workforce, App01 external, App02 workforce and App02 external.</p>
+        </section>
+
+        <section id="external-apps" aria-labelledby="external-apps-title">
+          <h3 id="external-apps-title">03 · Register the two External ID web clients</h3>
+          <p class="setup-context">Directory: external</p>
+          <ol>
+            <li>Go to <strong>Entra ID → App registrations → New registration</strong>. Name the first client <code>sampleapp01-external</code>; select accounts in this directory only.</li>
+            <li>Choose platform <strong>Web</strong> and set <code>https://&lt;app01-host&gt;/signin-external</code>. Register and record the client and application object IDs.</li>
+            <li>Under <strong>Authentication</strong>, verify the exact HTTPS callback. Leave implicit access-token and ID-token issuance disabled. Keep public client flows disabled for this confidential web client.</li>
+            <li>Under <strong>Certificates &amp; secrets</strong>, configure the server credential. For the PoC, store the secret value securely at creation and record expiry; production credential management needs customer agreement.</li>
+            <li>Under <strong>API permissions</strong>, configure delegated identity scopes <code>openid</code>, <code>profile</code>, <code>email</code> and <code>offline_access</code> and grant administrator consent. The sample does not require delegated <code>User.Read</code> or directory-write permissions for web sign-in.</li>
+            <li>Repeat for <code>sampleapp02-external</code>, using <code>https://&lt;app02-host&gt;/signin-external</code> and a separate credential.</li>
+          </ol>
+          <p>The repository's <code>Configure-PocApplications.ps1 -TenantKind External</code> creates both clients and their private manifests. If using that route, run it to create the clients and use these portal steps to inspect the result; portal-created clients cannot be silently adopted by the script.</p>
+          <p class="setup-check"><strong>Check:</strong> both external clients are single-directory Web apps with different IDs, credentials and callbacks.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-register-ciam-app">Microsoft: register an application in the external tenant</a></p>
+        </section>
+
+        <section id="external-roles" aria-labelledby="external-roles-title">
+          <h3 id="external-roles-title">04 · Define customer roles and require assignment</h3>
+          <p class="setup-context">Directory: external · repeat for App01 and App02</p>
+          <ol>
+            <li>Open each <strong>App registration → App roles → Create app role</strong>. Create enabled roles with exact values <code>Retiree</code>, <code>Dependent</code> and <code>External</code>; allowed member type <strong>Users/Groups</strong>.</li>
+            <li>Go to <strong>Enterprise applications</strong>, open the corresponding app, then <strong>Properties → Assignment required? → Yes</strong>. Keep <strong>Enabled for users to sign-in</strong> enabled.</li>
+            <li>In <strong>Users and groups → Add user/group</strong>, an administrator can assign an existing customer its intended role. In the employee invitation flow, the provisioner creates or finds the customer and assigns the target app's role.</li>
+          </ol>
+          <p>Roles are defined on <strong>App registrations</strong> and assigned on <strong>Enterprise applications</strong>. Assigning <code>Dependent</code> in App01 does not assign it in App02. Role assignment establishes the persona; application approval is recorded when the invitation is confirmed.</p>
+          <p class="setup-check"><strong>Check:</strong> assignment required is enabled on both enterprise apps. In step 15, test with an ordinary non-admin customer: an unassigned customer is rejected; a role-assigned customer with no current app approval cannot open business pages.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-use-app-roles-customers">Microsoft: app roles for customer applications</a></p>
+        </section>
+
+        <section id="user-flow" aria-labelledby="user-flow-title">
+          <h3 id="user-flow-title">05 · Associate a controlled email/password user flow</h3>
+          <p class="setup-context">Directory: external</p>
+          <ol>
+            <li>Go to <strong>Entra ID → External Identities → User flows → New user flow</strong>. Give the flow a clear name, such as <code>MultiIdpNet48ControlledSignIn</code>.</li>
+            <li>Select <strong>Email with password</strong>. Collect only agreed customer attributes; benefit relationships and application entitlements remain in the app's governance records.</li>
+            <li>Open the flow, then <strong>Use → Applications → Add application</strong>. Add both external web clients. An application can belong to only one user flow.</li>
+            <li>Disable public signup through Microsoft Graph: set <code>onInteractiveAuthFlowStart.isSignUpAllowed</code> to <code>false</code>. The portal creates a sign-up/sign-in flow; the signup restriction requires the Graph configuration below or the supplied setup script.</li>
+            <li>Read the flow back and verify both client associations, <code>EmailPassword-OAUTH</code> and disabled signup.</li>
+          </ol>
+          <details><summary>Graph configuration for invitation-only sign-in</summary><p>Use a privileged setup session in the external tenant with <code>EventListener.ReadWrite.All</code>. Retrieve the flow ID from <code>GET /v1.0/identity/authenticationEventsFlows</code>; match its name and application associations.</p><pre><code>PATCH https://graph.microsoft.com/v1.0/identity/authenticationEventsFlows/&lt;flow-id&gt;
+{
+  "@odata.type": "#microsoft.graph.externalUsersSelfServiceSignUpEventsFlow",
+  "onInteractiveAuthFlowStart": {
+    "@odata.type": "#microsoft.graph.onInteractiveAuthFlowStartExternalUsersSelfServiceSignUp",
+    "isSignUpAllowed": false
+  }
+}</code></pre><p>The tested <code>Configure-PocExternalFlow.ps1</code> uses Graph v1.0. Microsoft's disable-signup how-to also shows a beta example. Add associations individually through <code>/conditions/applications/includeApplications</code> when using Graph.</p></details>
+          <p class="setup-check"><strong>Check:</strong> an uninvited personal email cannot self-register from the normal login screen. Provisioned customers can sign in through the selected flow.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-user-flow-sign-up-sign-in-customers">Microsoft: create a user flow</a> · <a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-disable-sign-up-user-flow">Disable public signup</a> · <a href="https://learn.microsoft.com/en-us/graph/api/authenticationeventsflow-update?view=graph-rest-1.0">Graph v1.0 update API</a></p>
+        </section>
+
+        <section id="workforce-apps" aria-labelledby="workforce-apps-title">
+          <h3 id="workforce-apps-title">06 · Register the two workforce web clients</h3>
+          <p class="setup-context">Directory: workforce · switch directory before continuing</p>
+          <ol>
+            <li>Create <code>sampleapp01-workforce</code> and <code>sampleapp02-workforce</code> in <strong>App registrations</strong>, each single-directory and platform <strong>Web</strong>.</li>
+            <li>Set the respective callbacks to <code>https://&lt;app01-host&gt;/signin-workforce</code> and <code>https://&lt;app02-host&gt;/signin-workforce</code>. Configure separate server credentials, the same identity scopes and administrator consent as step 03.</li>
+            <li>Leave implicit grants and public client flows disabled. Under each enterprise application's <strong>Properties</strong>, set assignment required to <strong>Yes</strong>.</li>
+            <li>Define the enabled user app roles listed below. Values are case-sensitive; use <code>admin</code> and <code>dependentRegistrant</code> exactly.</li>
+            <li>Under <strong>Token configuration → Add optional claim → ID token</strong>, add <code>idp</code> to the workforce clients. App02 requires this signed claim to validate a partner's home organization.</li>
+          </ol>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Workforce client</th><th scope="col">Role values</th><th scope="col">Purpose</th></tr></thead><tbody>
+            <tr><td>Sampleapp01</td><td><code>Employee</code></td><td>Employee access and eligible dependent sponsorship</td></tr>
+            <tr><td>Sampleapp02</td><td><code>Employee</code>, <code>Partner</code>, <code>admin</code>, <code>dependentRegistrant</code></td><td>Employee / guest personas and employee-only registration capabilities</td></tr>
+          </tbody></table></div>
+          <p>App02 B2B guests authenticate in their home organization and receive a token for the workforce resource tenant. The resource app stays single-directory; there is no <code>common</code> or <code>organizations</code> authority in this implementation.</p>
+          <p class="setup-check"><strong>Check:</strong> four separate web clients now exist across two tenants. App01 has no workforce <code>Partner</code> role.</p>
+        </section>
+
+        <section id="employee-access" aria-labelledby="employee-access-title">
+          <h3 id="employee-access-title">07 · Assign employees and registration capabilities</h3>
+          <p class="setup-context">Directory: workforce · application: approval store</p>
+          <ol>
+            <li>Choose enabled workforce <strong>Member</strong> accounts. Under each target <strong>Enterprise application → Users and groups → Add user/group</strong>, assign <code>Employee</code>.</li>
+            <li>Create a current employee approval for that app using the workforce tenant ID and user object ID, expiry and benefit eligibility. The repository's <code>Add-PocAssignment.ps1</code> performs both role assignment and private entitlement recording.</li>
+            <li>For App02, assign additional capabilities only to approved employees. Select each role separately; an <code>admin</code> assignment does not replace <code>Employee</code>.</li>
+            <li>After deployment, sign out and sign in again after role changes. Confirm the registration sections visible to each account during step 15.</li>
+          </ol>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Action</th><th scope="col">Required workforce app roles</th><th scope="col">Additional check</th></tr></thead><tbody>
+            <tr><td>App01: invite a dependent</td><td><code>Employee</code></td><td>Current eligible employee approval and relationship confirmation</td></tr>
+            <tr><td>App02: invite a dependent</td><td><code>Employee</code> + (<code>admin</code> or <code>dependentRegistrant</code>)</td><td>Same employee eligibility and relationship check</td></tr>
+            <tr><td>App02: invite a vendor / business partner</td><td><code>Employee</code> + <code>admin</code></td><td>Current approval, accountable sponsor and business purpose</td></tr>
+          </tbody></table></div>
+          <p>Guests and external customers cannot act as employee registrants. Enterprise app roles are distinct from Entra administrator roles. The application refreshes the sponsor's directory state and roles when sending or confirming an invitation.</p>
+          <details><summary>Employee approval when configuring the client manually</summary><p>Seed an approved employee record in the protected entitlement file, repeat it for App02 and each approved employee, and set the identity configuration's <code>entitlementFile</code> to the deployed absolute path. A local file change alone does not update Azure.</p><pre><code>[
+  {
+    "appId": "sampleapp01",
+    "tenantId": "&lt;workforce-tenant-id&gt;",
+    "objectId": "&lt;employee-object-id&gt;",
+    "source": "workforce",
+    "persona": "employee",
+    "status": "approved",
+    "expiresUtc": "&lt;future-UTC-timestamp&gt;",
+    "benefitEligible": true
+  }
+]</code></pre><p>Use actual eligibility evidence and a bounded expiry. Invitation confirmation writes recipients' approvals to the durable registration store; do not seed recipients as already approved to bypass that test.</p></details>
+          <p class="setup-check"><strong>Check now:</strong> Employee and capability assignments match the intended users and approvals. <strong>Check in step 15:</strong> App02 Employee alone has no registration capability; dependentRegistrant sees only dependent registration; admin sees dependent and business registration.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/assign-user-or-group-access-portal">Microsoft: assign users and roles</a></p>
+        </section>
+
+        <section id="partner-access" aria-labelledby="partner-access-title">
+          <h3 id="partner-access-title">08 · Prepare App02 organizational B2B access</h3>
+          <p class="setup-context">Directory: workforce · partner home tenant: separate organization</p>
+          <ol>
+            <li>Under <strong>External Identities → External collaboration settings</strong>, review invitation permissions and collaboration restrictions for the approved partner domain.</li>
+            <li>Under <strong>External Identities → Cross-tenant access settings → Organizational settings</strong>, review the approved partner tenant's inbound B2B collaboration settings. Agree any home-tenant MFA trust with its administrator.</li>
+            <li>Prepare an approved Employee with <code>admin</code> and a partner test account. Send the invitation during step 15, after services and application deployment are complete.</li>
+            <li>At that point, use App02's <strong>Invite someone → vendor / business partner</strong> section and enter the organizational email. The service resolves a candidate Entra organization, creates a workforce B2B invitation, binds the guest, assigns App02 <code>Partner</code> and emails Graph's native redemption link.</li>
+            <li>During the acceptance test, the partner redeems with the expected home work account, completes required MFA and confirms registration. App02 records approval after verifying the signed home issuer.</li>
+          </ol>
+          <p>For personal vendor addresses, App02 uses the External ID customer path in steps 09–11. An email domain or discovery result is a routing hint; it does not prove organizational membership or a Microsoft 365 licence. A workforce sign-in failure never falls back to External ID.</p>
+          <p class="setup-check"><strong>Check now:</strong> the partner organization is permitted by workforce collaboration policy. <strong>Check in step 15:</strong> the redeemed guest has App02 Partner assignment and signed home-organization evidence, and has no App01 approval.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/cross-tenant-access-settings-b2b-collaboration">Microsoft: B2B cross-tenant settings</a> · <a href="https://learn.microsoft.com/en-us/graph/api/resources/invitation?view=graph-rest-1.0">B2B invitation and redemption URL</a></p>
+        </section>
+
+        <section id="services" aria-labelledby="services-title">
+          <h3 id="services-title">09 · Configure separate registration service identities</h3>
+          <p class="setup-context">Directory: workforce + external · Azure: same PoC resource group</p>
+          <ol>
+            <li>For the hosted PoC, create Windows App Service hosting for both net48 applications in the same resource group. Set ASP.NET V4.8, HTTPS-only and TLS 1.2 or later. Enable each site's <strong>Identity → System assigned → On</strong>; record the workforce managed identity object ID.</li>
+            <li>Grant the managed identities the workforce Graph application permissions below through an administrator setup session. Managed identities are service principals; these grants are separate from interactive web-client consent.</li>
+            <li>In the external tenant, create the dedicated <code>MultiIdp Net48 registration provisioner</code>, configure its private server credential and grant only its listed Graph application permissions with administrator consent.</li>
+            <li>Record the target enterprise app object IDs and role GUIDs in each private registration configuration. The service must assign the correct role to the correct target app.</li>
+            <li>Disable HTTP URL request logs, failed-request tracing and detailed error logging on the sample sites before invitations. The PoC deployment script refuses these settings because URLs can contain invitation bearer tokens. Keep safe operational audits separate.</li>
+          </ol>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Runtime identity</th><th scope="col">Graph application permissions in this PoC</th></tr></thead><tbody>
+            <tr><td>App01 workforce managed identity</td><td><code>Application.Read.All</code>, <code>User.Read.All</code></td></tr>
+            <tr><td>App02 workforce managed identity</td><td>Same read permissions + <code>AppRoleAssignment.ReadWrite.All</code>, <code>User.Invite.All</code></td></tr>
+            <tr><td>External customer provisioner</td><td><code>User.ReadWrite.All</code>, <code>Application.Read.All</code>, <code>AppRoleAssignment.ReadWrite.All</code></td></tr>
+          </tbody></table></div>
+          <p>These are tenant-wide application permissions held by the registration services. Scope their use in code to the owned PoC clients; protect credentials and review the service boundary for production. None of these provisioning grants belongs on the four interactive clients. <code>Configure-PocRegistration.ps1</code> applies and verifies the listed grants.</p>
+          <p class="source-note">Graph application-permission grants require a privileged setup administrator and the relevant consent scopes; the runtime permission table is not the administrator's delegated scope list. <a href="https://learn.microsoft.com/en-us/graph/api/serviceprincipal-post-approleassignedto?view=graph-rest-1.0">Microsoft: grant a service principal an app role</a></p>
+          <p class="setup-check"><strong>Check:</strong> service-token calls can read sponsor state, create the intended customer / guest and assign its persona; ordinary web login cannot write directory data.</p>
+        </section>
+
+        <section id="email" aria-labelledby="email-title">
+          <h3 id="email-title">10 · Configure the Azure-managed invitation sender</h3>
+          <p class="setup-context">Azure: workforce subscription · same PoC resource group</p>
+          <ol>
+            <li>In Azure, create <strong>Email Communication Services</strong> and provision an <strong>Azure-managed domain</strong>. Wait for verification and record its generated sender address.</li>
+            <li>Create <strong>Azure Communication Services</strong> in the same resource group. Connect the managed email domain and record the HTTPS communication endpoint.</li>
+            <li>Grant both sample sites' managed identities the resource-scoped mail permissions. The supplied script creates a custom role containing <code>Microsoft.Communication/CommunicationServices/read</code> and <code>write</code>, assigned only on that communication resource.</li>
+            <li>Set the sender and endpoint in private per-app registration configuration. Send the actual invitation and verify delivery with an approved test recipient during step 15, after password setup and app deployment.</li>
+          </ol>
+          <p>The application sends a bound, single-use HTTPS invitation lasting at most 24 hours, capped by the access deadline. For B2B it calls Graph once with <code>sendInvitationMessage=false</code> and emails the returned <code>inviteRedeemUrl</code>. For personal email it sends its own External ID registration link. Passwords are never emailed.</p>
+          <p class="setup-check"><strong>Check now:</strong> the verified domain is connected and runtime sender permissions are assigned. <strong>Check in step 15:</strong> the recipient receives the expected app's email. A provider-accepted send alone is not proof of delivery or completed registration.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/create-email-communication-resource">Microsoft: create email resources</a> · <a href="https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/send-email">Send email</a></p>
+        </section>
+
+        <section id="password-setup" aria-labelledby="password-setup-title">
+          <h3 id="password-setup-title">11 · Enable invited users to verify email and create a password</h3>
+          <p class="setup-context">Directory: external · client: separate native setup registration</p>
+          <ol>
+            <li>Under <strong>Entra ID → Authentication methods → Policies → Email OTP</strong>, enable the email method for the intended customer users. The PoC script explicitly enables all users in this dedicated external tenant and refuses exclusions; review the intended scope before applying it.</li>
+            <li>Create a separate single-directory app named <code>MultiIdp Net48 invitation password setup</code>. Under <strong>Authentication → Redirect URI configuration</strong>, set <strong>Enable the following mobile and desktop flows</strong> and <strong>Enable native authentication</strong> to <strong>Yes</strong>, then save. The older label for the first setting is <strong>Allow public client flows</strong>. Leave API permissions empty; no client secret is needed.</li>
+            <li>Add this setup client to the same controlled EmailPassword user flow. Keep public signup disabled; the native client is separate from the confidential web sign-in clients.</li>
+            <li>Store its client ID as <code>external.passwordSetupClientId</code> in both private registration configurations. With repository-managed state, run <code>Configure-PocPasswordSetup.ps1</code> <strong>after</strong> <code>Configure-PocRegistration.ps1</code>.</li>
+            <li>During step 15, open an approved personal invitation: <strong>Verify email and create password → verify Microsoft's email code → Create your password → normal sign-in → Confirm registration</strong>. An existing customer can select existing-account sign-in.</li>
+          </ol>
+          <p>The backend pre-provisions an email/password customer with an unknown random password. Initial password creation uses Microsoft's native SSPR API behind the invitation's <strong>Create your password</strong> screens. This is an account-setup extension to MSAL web login. Codes, passwords and native continuation tokens are never recorded in source or logs.</p>
+          <details><summary>Administrator setup permission for the Email OTP policy</summary><p>The temporary delegated setup session needs <code>Policy.ReadWrite.AuthenticationMethod</code>, an appropriate administrator role and the external tenant. Use the same external administrator as the Azure CLI setup session. The runtime provisioner has no policy-write permission.</p><pre><code>Connect-MgGraph -TenantId $externalTenantId `
+  -Scopes Policy.ReadWrite.AuthenticationMethod,User.Read `
+  -ContextScope Process
+
+# In the same PowerShell process, run registration setup with:
+# -EnableExternalEmailPasswordReset -UseMicrosoftGraphPolicyContext</code></pre></details>
+          <p class="setup-check"><strong>Check now:</strong> Email OTP is enabled and the native client is associated and configured. <strong>Check in step 15:</strong> the invited user creates their own password from the invitation, then confirms app registration. There is no instruction to select Forgot password.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-enable-password-reset-customers">Microsoft: customer password reset</a> · <a href="https://learn.microsoft.com/en-us/entra/identity-platform/concept-native-authentication">Enable native authentication</a> · <a href="https://learn.microsoft.com/en-us/entra/identity-platform/reference-native-authentication-api">Native API</a> · <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPasswordSetup.cs">Implementation source</a></p>
+        </section>
+
+        <section id="policies" aria-labelledby="policies-title">
+          <h3 id="policies-title">12 · Verify sign-in policies and MFA in both directories</h3>
+          <p class="setup-context">Directory: workforce and external, checked separately</p>
+          <ol>
+            <li>Review <strong>Protection → Conditional Access</strong> and the authentication methods allowed in each tenant. Confirm licensing and the external tenant's supported policy features.</li>
+            <li>Target the appropriate enterprise applications and intended personas. Test employees, customers and B2B guests against the agreed security requirements.</li>
+            <li>For partners, check security-information registration and cross-tenant trust before the onsite demonstration. A home work account still needs to meet resource-tenant policy.</li>
+            <li>On failure, inspect <strong>Monitoring &amp; health → Sign-in logs</strong> in the tenant that issued the token, then the application's own denial reason. Resolve assignment, consent, MFA or policy problems at that boundary.</li>
+          </ol>
+          <p class="setup-check"><strong>Check:</strong> permitted personas complete required MFA; blocked sign-ins stay blocked and do not switch identity realms.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/concept-supported-features-customers">Microsoft: external-tenant feature support</a></p>
+        </section>
+
+        <section id="application-config" aria-labelledby="application-config-title">
+          <h3 id="application-config-title">13 · Connect the .NET Framework 4.8 applications</h3>
+          <p class="setup-context">Application server: IIS / Windows App Service</p>
+          <ol>
+            <li>Record both clients, tenant IDs, exact redirect URIs and exact token issuers per app. Read the issuers from each tenant's OIDC discovery document.</li>
+            <li>Configure employee domains and approved partner routes. App01 routes employees to workforce and customers to external; App02 also supports approved workforce B2B partners.</li>
+            <li>Supply confidential-client secrets in server environment settings. Set the private identity and registration JSON paths; preserve durable invitation/approval state outside deployment content.</li>
+            <li>Deploy the net48 application changes described in <a href="migration-sampleapp01.html">Modify an existing .NET 4.8 application</a>. Both providers must validate signature, issuer, audience, lifetime, nonce and state before creating the shared application cookie.</li>
+            <li>Verify current approval by <strong>app + tenant ID + object ID</strong>, persona role, expiry, and dependent / partner rules on protected application requests.</li>
+          </ol>
+          <details><summary>Authority and private configuration locations</summary><pre><code>Workforce authority:
+https://login.microsoftonline.com/&lt;workforce-tenant-id&gt;
+
+External authority:
+https://&lt;subdomain&gt;.ciamlogin.com/&lt;external-tenant-id&gt;
+
+Discovery: append /v2.0/.well-known/openid-configuration
+MSAL uses the authority above; OWIN uses authority + /v2.0.
+Validate the exact issuer returned by discovery.
+
+MULTIIDP_SAMPLEAPP01_CONFIG / MULTIIDP_SAMPLEAPP02_CONFIG
+MULTIIDP_SAMPLEAPP01_REGISTRATION_CONFIG / MULTIIDP_SAMPLEAPP02_REGISTRATION_CONFIG
+MULTIIDP_SAMPLEAPP01_WORKFORCE_SECRET / MULTIIDP_SAMPLEAPP02_WORKFORCE_SECRET
+MULTIIDP_SAMPLEAPP01_EXTERNAL_SECRET / MULTIIDP_SAMPLEAPP02_EXTERNAL_SECRET
+MULTIIDP_REGISTRATION_EXTERNAL_SECRET
+
+Hosted durable state:
+D:\home\data\multiidp\&lt;appId&gt;\registration-state.json</code></pre></details>
+          <p class="setup-check"><strong>Check:</strong> employees and confirmed external customers reach the same app through different verified authorities. A valid token without current application approval is denied.</p>
+          <p class="source-note"><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Authentication source</a> · <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Authorization source</a> · <a href="index.html#code/sampleapp02/samples%2Fnet48%2FShared%2FRegistrationServices.cs">Provisioning and B2B source</a></p>
+        </section>
+
+        <section id="driver-access" aria-labelledby="driver-access-title">
+          <h3 id="driver-access-title">14 · Protect the driver with its own workforce registration</h3>
+          <p class="setup-context">Directory: workforce · Azure: driver App Service</p>
+          <ol>
+            <li>Create a fifth, separate workforce app registration for the driver. Configure the Web callback <code>https://&lt;driver-host&gt;/.auth/login/aad/callback</code>.</li>
+            <li>In <strong>Driver App Service → Authentication</strong>, configure Microsoft Entra using the workforce tenant and this driver client. Require authentication and redirect unauthenticated requests to Entra.</li>
+            <li>Define the enabled user role <code>DriverAccess</code>, require assignment on its enterprise app and assign the operator to that role. Restrict App Service's allowed principals to the intended workforce operator object ID; leave no anonymous excluded paths.</li>
+            <li>Verify pages, assets, settings, code catalogs and source downloads are protected. <code>Secure-PocDriver.ps1</code> configures the dedicated EasyAuth client and operator allowlist.</li>
+          </ol>
+          <p>The driver's EasyAuth hybrid login enables ID-token issuance on that driver registration only. The four demo web clients retain authorization code + PKCE. Caldova's live driver is restricted to its configured administrator; sample-app <code>admin</code> does not grant driver access.</p>
+          <p class="setup-check"><strong>Check:</strong> the approved operator can open this guide; anonymous visitors and other identities cannot read any hosted driver content.</p>
+          <p class="source-note"><a href="https://learn.microsoft.com/en-us/azure/app-service/configure-authentication-provider-aad">Microsoft: App Service Entra authentication and allowed principals</a></p>
+        </section>
+
+        <section id="validation" aria-labelledby="validation-title">
+          <h3 id="validation-title">15 · Run the acceptance checks</h3>
+          <p class="setup-context">Both directories and both applications · record actual outcomes</p>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Test</th><th scope="col">Expected result</th></tr></thead><tbody>
+            <tr><td>Employee login in each app</td><td>Workforce issuer, Employee role and current same-app approval</td></tr>
+            <tr><td>App01 employee invites a personal dependent</td><td>Email received → verify email → create password → sign in → confirm → fresh login → benefit access</td></tr>
+            <tr><td>App02 dependentRegistrant</td><td>Dependent form allowed; business form denied</td></tr>
+            <tr><td>App02 employee admin invites personal vendor</td><td>External customer identity + App02 External role + confirmed app approval</td></tr>
+            <tr><td>App02 employee admin invites organizational partner</td><td>Native B2B redemption + verified home issuer + Partner role + confirmed App02 approval</td></tr>
+            <tr><td>Customer signs in before confirming invitation</td><td>Unique current sent invitation resumes restricted registration; business pages remain denied until confirmation and fresh login</td></tr>
+            <tr><td>Wrong user, wrong app, expired / reused link, invalid CSRF</td><td>Registration denied; no new approval</td></tr>
+            <tr><td>Sponsor expires, loses capability or benefit eligibility</td><td>Invitation confirmation denied; dependent access follows current linked employee eligibility</td></tr>
+            <tr><td>Unassigned user / revoked app approval / workforce policy failure</td><td>Access denied; no automatic realm fallback</td></tr>
+            <tr><td>Redeploy; anonymous driver access</td><td>Durable registration state survives; every driver URL remains gated</td></tr>
+          </tbody></table></div>
+          <p>Keep delivery, password setup, directory authentication and application admission as separate test results. Capture tenant, client, user object ID, role and denial category privately; avoid tokens and invitation URLs in screenshots or logs.</p>
+          <p><a href="https://caldova-sampleapp01-07279263.azurewebsites.net/" target="_blank" rel="noopener noreferrer">Open Caldova Sampleapp01</a> · <a href="https://caldova-sampleapp02-07279263.azurewebsites.net/" target="_blank" rel="noopener noreferrer">Open Caldova Sampleapp02</a> · <a href="index.html#runbook/sampleapp01">Driver checkpoints</a></p>
+        </section>
+
+        <section id="automation" aria-labelledby="automation-title">
+          <h3 id="automation-title">Repository setup order</h3>
+          <p>Download the <a href="source/net48-source.zip">source and setup scripts</a>. The scripts run from the repository root and use tenant-bound, privately saved manifests. Choose either script-created registrations or manually configured customer registrations; for the latter, adapt private configuration to the supplied schema instead of attempting script adoption.</p>
+          <div class="table-scroll"><table><thead><tr><th scope="col">Order</th><th scope="col">Script / action</th><th scope="col">Required before running</th></tr></thead><tbody>
+            <tr><td>1</td><td>Existing tenant: create/tag only the hosting resource group, Windows plan and three sites. New lab: <code>Initialize-PocInfrastructure.ps1</code>.</td><td>The initializer always creates a new external directory; skip it when the customer already has one. Hosting resources must carry <code>purpose=multiidp-poc</code> for subsequent scripts.</td></tr>
+            <tr><td>2</td><td><code>Configure-PocApplications.ps1 -TenantKind External</code>, then <code>Configure-PocExternalFlow.ps1</code></td><td>External tenant administrator, selected app HTTPS origins; creates both external clients before the flow.</td></tr>
+            <tr><td>3</td><td><code>Configure-PocApplications.ps1 -TenantKind Workforce</code></td><td>Workforce administrator; same two app origins.</td></tr>
+            <tr><td>4</td><td><code>Add-PocAssignment.ps1</code> for approved Employee accounts in each app</td><td>Actual Member object IDs, future expiry and benefit eligibility. App02 Employee approval must precede capability setup.</td></tr>
+            <tr><td>5</td><td><code>Export-PocConfiguration.ps1</code></td><td>Both owned client manifests and private governance records; employee domains / approved partner inventory.</td></tr>
+            <tr><td>6</td><td><code>Configure-PocRegistration.ps1</code></td><td>Both manifests, owned hosting sites, selected employee capability IDs, approval deadline; enable external email password reset explicitly.</td></tr>
+            <tr><td>7</td><td><code>Configure-PocPasswordSetup.ps1</code></td><td>Controlled flow and both registration JSON files produced in order 6.</td></tr>
+            <tr><td>8</td><td><code>Secure-PocDriver.ps1</code>, build, then <code>Deploy-PocSites.ps1</code></td><td>Operator object ID; private tenant/client credentials and configs; protect the driver before publishing its content.</td></tr>
+            <tr><td>9</td><td><code>Test-PocDriverAccess.ps1</code> and the persona tests above</td><td>Live HTTPS deployment; owner completes codes, password creation and MFA.</td></tr>
+          </tbody></table></div>
+          <details><summary>Example parameters for the key Entra scripts</summary><p>Replace the variables with your privately recorded values. These commands create or configure resources; read each script and its prerequisites before running. Use a new customer-specific state folder throughout; the Caldova state must not be reused.</p><pre><code># Define tenant IDs, subscription ID, origins, user IDs and deadline privately.
+$state = Join-Path $env:LOCALAPPDATA 'MultiIdpPoC-Customer'
+$env:AZURE_CONFIG_DIR = Join-Path $state 'AzureCli'
+az login --tenant $externalTenantId --allow-no-subscriptions
+
+.\scripts\poc\Configure-PocApplications.ps1 `
+  -TenantId $externalTenantId -TenantKind External `
+  -App01BaseUrl $app01Origin -App02BaseUrl $app02Origin -StateDirectory $state
+.\scripts\poc\Configure-PocExternalFlow.ps1 `
+  -TenantId $externalTenantId -StateDirectory $state
+
+az login --tenant $workforceTenantId
+.\scripts\poc\Configure-PocApplications.ps1 `
+  -TenantId $workforceTenantId -TenantKind Workforce `
+  -App01BaseUrl $app01Origin -App02BaseUrl $app02Origin -StateDirectory $state
+
+# Repeat for each approved employee and target app.
+.\scripts\poc\Add-PocAssignment.ps1 `
+  -TenantId $workforceTenantId -TenantKind Workforce `
+  -AppId sampleapp02 -UserId $employeeObjectId `
+  -Persona Employee -ExpiresUtc $approvalDeadline -BenefitEligible `
+  -StateDirectory $state
+
+.\scripts\poc\Export-PocConfiguration.ps1 `
+  -WorkforceTenantId $workforceTenantId -ExternalTenantId $externalTenantId `
+  -EmployeeDomains $employeeDomains -StateDirectory $state
+
+# After Export-PocConfiguration and the bound external Graph policy session:
+.\scripts\poc\Configure-PocRegistration.ps1 `
+  -SubscriptionId $subscriptionId `
+  -WorkforceTenantId $workforceTenantId -ExternalTenantId $externalTenantId `
+  -ResourceGroup $resourceGroup -NameSuffix $nameSuffix `
+  -AllowedOperatorObjectId $employeeAdminObjectId `
+  -DependentRegistrantObjectIds $dependentRegistrantObjectIds `
+  -ApprovalLimitUtc $approvalDeadline `
+  -EnableExternalEmailPasswordReset -UseMicrosoftGraphPolicyContext `
+  -StateDirectory $state
+.\scripts\poc\Configure-PocPasswordSetup.ps1 `
+  -TenantId $externalTenantId -StateDirectory $state
+
+.\scripts\poc\Secure-PocDriver.ps1 `
+  -SubscriptionId $subscriptionId -WorkforceTenantId $workforceTenantId `
+  -AllowedUserObjectId $driverOperatorObjectId -SiteName $driverSiteName `
+  -ResourceGroup $resourceGroup -StateDirectory $state
+
+dotnet restore .\samples\net48\MultiIdp.Net48.sln
+.\scripts\poc\Deploy-PocSites.ps1 `
+  -SubscriptionId $subscriptionId `
+  -WorkforceTenantId $workforceTenantId -ExternalTenantId $externalTenantId `
+  -ResourceGroup $resourceGroup -NameSuffix $nameSuffix -StateDirectory $state
+.\scripts\poc\Test-PocDriverAccess.ps1 -BaseUri $driverOrigin</code></pre></details>
+          <p>The hosting/deployment scripts retain the <code>caldova-</code> site-name prefix and vary <code>NameSuffix</code>; adapt them if customer site names differ. The initializer uses the default state folder and has no existing-tenant mode.</p>
+          <p>For unchanged automation, use <code>https://caldova-sampleapp01-&lt;suffix&gt;.azurewebsites.net</code> and the App02 equivalent as the registered origins. Registration setup verifies those origins against the sites. An existing IIS application can use its own origins for interactive login, but the App Service managed-identity registration backend needs adaptation. ARM and workforce Graph setup sessions must use the same workforce operator.</p>
+          <p>Script-created PoC credentials expire after seven days. Scripts refuse expired or untracked credentials and do not rotate automatically. Arrange explicit credential rotation and update protected saved state and server settings before a later demonstration. Keep the private state directory and its protected credentials outside Git and deployment source downloads.</p>
+        </section>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

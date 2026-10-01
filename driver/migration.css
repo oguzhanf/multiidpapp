@@ -17,5 +17,11 @@
 .migration-page .rail li{counter-increment:migration-step}
 .migration-page .rail li a::before{content:counter(migration-step,decimal-leading-zero) " ";color:var(--muted);margin-right:.3rem}
 .migration-page td code{white-space:normal}
+.entra-page .setup-context{font-size:.82rem;font-weight:600;color:var(--blue);margin:.5rem 0 1rem}
+.entra-page .setup-start{border:1px solid var(--line);background:var(--light);padding:1rem 1.2rem;margin:1.2rem 0}
+.entra-page .setup-start p{margin:.5rem 0 0}
+.entra-page .setup-check{border-left:3px solid var(--blue);padding:.6rem .9rem;background:var(--light);margin:1rem 0}
+.entra-page article ol{padding-left:1.4rem}
+.entra-page article li{padding-left:.2rem;margin:.6rem 0}
 @media(max-width:760px){.migration-page article>h2{font-size:1.5rem}.migration-page .migration-toc{display:flex;flex-wrap:wrap;gap:.4rem .9rem;font-size:.82rem;margin:1rem 0}.migration-page .site-header{align-items:flex-start;flex-direction:column}.migration-page article section{margin:1.7rem 0}.migration-page article section>h3{font-size:1.15rem}}
 @media print{.migration-page article{max-width:none}.migration-page article>h2{font-size:18pt}.migration-page article section>h3{font-size:13pt}.migration-page .site-header>a,.migration-page .migration-toc{display:none}.migration-page article section{margin:7mm 0;padding-top:4mm}.migration-page details{break-inside:avoid}.migration-page a{color:#111}.migration-page details pre{max-height:none;white-space:pre-wrap}}
