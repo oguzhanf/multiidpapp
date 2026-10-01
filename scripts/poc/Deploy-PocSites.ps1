@@ -68,13 +68,19 @@ foreach ($appId in @('sampleapp01','sampleapp02')) {
 }
 $driver = Join-Path $stageRoot 'driver'
 New-Item -ItemType Directory -Path "$driver\source" -Force | Out-Null
-Copy-Item -LiteralPath "$repoRoot\driver\index.html","$repoRoot\driver\site.css","$repoRoot\driver\site.js","$repoRoot\driver\code-samples.js","$repoRoot\driver\web.config" -Destination $driver
+Copy-Item -LiteralPath "$repoRoot\driver\index.html","$repoRoot\driver\site.css","$repoRoot\driver\site.js","$repoRoot\driver\code-samples.js","$repoRoot\driver\web.config","$repoRoot\driver\migration-sampleapp01.html","$repoRoot\driver\migration.css" -Destination $driver
 $driverHtml = [IO.File]::ReadAllText((Join-Path $driver 'index.html'))
 foreach ($asset in @('site.css','site.js','code-samples.js')) {
     $version = (Get-FileHash -LiteralPath (Join-Path $driver $asset) -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,16)
     $driverHtml = $driverHtml.Replace('"' + $asset + '"', '"' + $asset + '?v=' + $version + '"')
 }
 [IO.File]::WriteAllText((Join-Path $driver 'index.html'), $driverHtml, [Text.UTF8Encoding]::new($false))
+$migrationHtml = [IO.File]::ReadAllText((Join-Path $driver 'migration-sampleapp01.html'))
+foreach ($asset in @('site.css','migration.css')) {
+    $version = (Get-FileHash -LiteralPath (Join-Path $driver $asset) -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,16)
+    $migrationHtml = $migrationHtml.Replace('"' + $asset + '"', '"' + $asset + '?v=' + $version + '"')
+}
+[IO.File]::WriteAllText((Join-Path $driver 'migration-sampleapp01.html'), $migrationHtml, [Text.UTF8Encoding]::new($false))
 Write-PocJson "$driver\lab-settings.json" $lab
 $sourceStage=Join-Path $stageRoot 'source'
 New-Item -ItemType Directory -Path "$sourceStage\samples\net48","$sourceStage\scripts\poc","$sourceStage\tests\Net48" -Force | Out-Null

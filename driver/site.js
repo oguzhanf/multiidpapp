@@ -557,11 +557,18 @@ app.Use(typeof(MsalOpenIdConnectMiddleware), app, options, msal);`;
     currentView = view; render(true, false); updateViewHash();
   }
   function applyHashRoute(initial = false) {
-    const route = location.hash.match(/^#(code|runbook)\/(sampleapp01|sampleapp02)$/);
+    const route = location.hash.match(/^#(code|runbook)\/(sampleapp01|sampleapp02)(?:\/([^/]+))?$/);
     if (!route && location.hash && location.hash !== "#architecture") return false;
+    let file = "";
+    if (route?.[3]) {
+      if (route[1] !== "code") return false;
+      try { file = decodeURIComponent(route[3]); } catch (_) { return false; }
+      if (!window.pocCodeSamples?.apps?.[route[2]]?.includes(file)) return false;
+    }
     const app = route ? route[2] : state.app;
     const view = route ? route[1] : "architecture";
-    const changed = app !== state.app || view !== currentView;
+    const changed = app !== state.app || view !== currentView || Boolean(file && file !== selectedCodeFiles[app]);
+    if (file) selectedCodeFiles[app] = file;
     state.app = app; currentView = view;
     if (changed) save();
     if (changed || initial) render(!initial);

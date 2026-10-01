@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Change locations for adding workforce and External ID sign-in, dependent registration and application authorization to an existing ASP.NET .NET Framework 4.8 IIS application.">
+  <title>Modify an existing .NET 4.8 application · Sampleapp01</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="migration.css">
+</head>
+<body class="migration-page">
+  <a class="skip-link" href="#migration-content">Skip to migration guide</a>
+  <header class="site-header">
+    <div class="heading"><span class="product-mark" aria-hidden="true">01</span><div><h1>Modify an existing .NET 4.8 application</h1><p>Sampleapp01 · workforce employees + External ID retirees and dependents</p></div></div>
+    <a class="secondary" href="index.html">Back to driver</a>
+  </header>
+  <div class="workspace">
+    <aside class="rail">
+      <nav aria-label="Application change locations">
+        <a class="rail-overview" href="#location-map">Change location map</a>
+        <ol>
+          <li><a href="#packages">Project and packages</a></li>
+          <li><a href="#registrations">Directory registrations</a></li>
+          <li><a href="#configuration">Server configuration</a></li>
+          <li><a href="#startup">Authentication startup</a></li>
+          <li><a href="#login">Login and logout</a></li>
+          <li><a href="#identity">Existing user mapping</a></li>
+          <li><a href="#authorization">Protected application paths</a></li>
+          <li><a href="#registration">Dependent registration</a></li>
+          <li><a href="#iis">IIS and Windows dependencies</a></li>
+          <li><a href="#acceptance">Acceptance and rollback</a></li>
+        </ol>
+        <a class="rail-overview" href="#references">Microsoft references</a>
+      </nav>
+    </aside>
+    <main>
+      <article id="migration-content">
+        <h2>Extend the working workforce PoC</h2>
+        <p>Keep the existing ASP.NET application and its business screens. Extend its workforce authentication with a separate External ID provider, then apply the same application authorization to both identities. This guide documents the implementation built in Sampleapp01; adapt the named locations to the customer's project.</p>
+        <p class="source-note">MVC controller names below are sample locations. For Web Forms, use the corresponding login page events, shared page base class and registration pages, or retain the sample's MVC registration endpoints beside the existing pages.</p>
+        <nav class="migration-toc" aria-label="Jump to a change"><a href="#location-map">Location map</a><a href="#startup">Startup</a><a href="#login">Login</a><a href="#authorization">Authorization</a><a href="#registration">Registration</a><a href="#iis">IIS</a><a href="#acceptance">Checks</a></nav>
+
+        <section id="location-map" aria-labelledby="location-map-title">
+          <h3 id="location-map-title">Change location map</h3>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Existing application location</th><th>Required change</th><th>Sample source</th></tr></thead>
+            <tbody>
+              <tr><td>Project / NuGet</td><td>Add compatible OWIN, MSAL and token validation libraries.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FDirectory.Build.props">Directory.Build.props</a></td></tr>
+              <tr><td>Startup / Startup.Auth</td><td>Two tenant-specific providers, one application cookie.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStartup.cs">Startup.cs</a></td></tr>
+              <tr><td>Configuration / IIS</td><td>Separate clients, callbacks, secrets and private storage.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FConfiguration.cs">Configuration.cs</a></td></tr>
+              <tr><td>Login page / controller</td><td>Route email hint and challenge the selected provider.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FControllers.cs">Controllers.cs</a></td></tr>
+              <tr><td>User lookup / access checks</td><td>Map stable directory IDs and enforce current app approval.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPolicy.cs">Policy.cs</a></td></tr>
+              <tr><td>Employee registration screens</td><td>Invite, provision, verify email, create password and confirm.</td><td><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationControllers.cs</a></td></tr>
+            </tbody>
+          </table></div>
+        </section>
+
+        <section id="packages" aria-labelledby="packages-title">
+          <h3 id="packages-title">01 · Project and packages</h3>
+          <p>Keep target framework <code>net48</code>. In an existing non-SDK project, install through NuGet; add the adapted source files as normal project items. Conversion to the sample's SDK project format is unnecessary. Retain compatible existing versions where possible and resolve binding redirects after the build.</p>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Package</th><th>Version tested here</th></tr></thead>
+            <tbody>
+              <tr><td><code>Microsoft.Identity.Client</code></td><td>4.90.1</td></tr>
+              <tr><td><code>Microsoft.Owin.Host.SystemWeb</code>, <code>Microsoft.Owin.Security.Cookies</code>, <code>Microsoft.Owin.Security.OpenIdConnect</code></td><td>4.2.3</td></tr>
+              <tr><td><code>Microsoft.IdentityModel.Protocols.OpenIdConnect</code>, <code>Microsoft.IdentityModel.Tokens</code>, <code>System.IdentityModel.Tokens.Jwt</code></td><td>8.23.0</td></tr>
+              <tr><td><code>Newtonsoft.Json</code>; <code>Microsoft.AspNet.Mvc</code> for sample controllers</td><td>13.0.4; 5.3.0</td></tr>
+            </tbody>
+          </table></div>
+          <p>Set <code>Startup.AppId</code> to <code>"sampleapp01"</code>. If copying the shared source unchanged, add <code>SAMPLEAPP01</code> to the project's compilation constants; otherwise its conditional compilation selects Sampleapp02.</p>
+          <p class="source-note">This sample uses Katana with an explicit MSAL adapter. Microsoft also provides <a href="https://learn.microsoft.com/en-us/entra/msidweb/frameworks/owin">Microsoft.Identity.Web.OWIN</a> for Framework applications. Using that alternative requires its own dual-provider adaptation and verification.</p>
+        </section>
+
+        <section id="registrations" aria-labelledby="registrations-title">
+          <h3 id="registrations-title">02 · Directory registrations</h3>
+          <p>Represent this application separately in each tenant, with assignment required. Keep the working workforce client and assign employees its <code>Employee</code> role. Create the External ID web client with <code>Dependent</code>, <code>Retiree</code> and <code>External</code> roles and associate its controlled EmailPassword flow. Public signup is disabled in this design.</p>
+          <ul>
+            <li>Workforce callback: <code>https://&lt;application-host&gt;/signin-workforce</code>.</li>
+            <li>External callback: <code>https://&lt;application-host&gt;/signin-external</code>.</li>
+            <li>Each client uses its own credential and tenant-specific issuer. Web login uses authorization code with PKCE.</li>
+          </ul>
+          <p>Sampleapp01 admits employees and approved customer personas. Organizational partner B2B belongs to Sampleapp02.</p>
+        </section>
+
+        <section id="configuration" aria-labelledby="configuration-title">
+          <h3 id="configuration-title">03 · Server configuration</h3>
+          <p><code>ConfigurationLoader.Load("sampleapp01")</code> reads <code>MULTIIDP_SAMPLEAPP01_CONFIG</code>: an absolute protected JSON path containing employee domains, both tenant/client IDs, exact issuers, callbacks and the entitlement path. Obtain each issuer from that tenant's discovery metadata.</p>
+          <p>Supply credentials only in the server environment: <code>MULTIIDP_SAMPLEAPP01_WORKFORCE_SECRET</code> and <code>MULTIIDP_SAMPLEAPP01_EXTERNAL_SECRET</code>. Registration has a separate <code>MULTIIDP_SAMPLEAPP01_REGISTRATION_CONFIG</code> and provisioner credential <code>MULTIIDP_REGISTRATION_EXTERNAL_SECRET</code>. Keep configuration in protected <code>App_Data</code> or outside the web root; durable invitation state stays outside deployment content.</p>
+        </section>
+
+        <section id="startup" aria-labelledby="startup-title">
+          <h3 id="startup-title">04 · Authentication startup</h3>
+          <p>Extend the existing <code>Startup.Configuration(IAppBuilder)</code> or <code>Startup.Auth.cs</code>; keep one OWIN startup entry point. Register the secure cookie first, then passive schemes named <code>workforce</code> and <code>external</code>, both issuing that cookie. Preserve the existing <code>Global.asax</code> initialization, routes and services. If retaining the sample MVC endpoints beside Web Forms, merge their routes and <code>AntiforgeryFailureFilter</code> registration into <code>Application_Start</code>.</p>
+          <details><summary>Authority and MSAL integration — partial excerpts</summary>
+            <pre><code>// Startup.AddProvider: separate client and settings for each tenant.
+var authority = external
+    ? "https://" + tenant.CiamDomain + "/" + tenant.TenantId
+    : "https://login.microsoftonline.com/" + tenant.TenantId;
+var msal = ConfidentialClientApplicationBuilder.Create(tenant.ClientId)
+    .WithClientSecret(secret).WithAuthority(authority)
+    .WithRedirectUri(tenant.RedirectUri).Build();
+// OWIN Authority is authority + "/v2.0"; callbacks are distinct.
+
+// MsalOpenIdConnectHandler.RedeemAuthorizationCodeAsync:
+var result = await client.AcquireTokenByAuthorizationCode(new string[0], request.Code)
+    .WithPkceCodeVerifier(verifier).ExecuteAsync().ConfigureAwait(false);</code></pre>
+          </details>
+          <p>Port the complete <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FMsalOpenIdConnect.cs">MSAL adapter</a> and <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FStrictJwtSecurityTokenHandler.cs">strict validator</a>. Katana retains protected state and nonce checks; the validator enforces signature, issuer, audience and lifetime. <code>SecurityTokenValidated</code> calls <code>RegistrationSignInPolicy.Validate</code> before admission or a restricted registration session. An access token is never displayed or stored in the application cookie.</p>
+        </section>
+
+        <section id="login" aria-labelledby="login-title">
+          <h3 id="login-title">05 · Login and logout</h3>
+          <p>Replace the Windows-only entry point in the login controller or Web Forms button event. Validate the form/CSRF token, resolve the email hint using <code>RegistrationRuntime.Route</code>, and challenge only that scheme.</p>
+          <details><summary>Login challenge — partial excerpt</summary>
+            <pre><code>var source = RegistrationRuntime.Route(Startup.Config, email);
+var properties = new AuthenticationProperties { RedirectUri = "/Benefits/Index" };
+properties.Dictionary["login_hint"] = email.Trim();
+HttpContext.GetOwinContext().Authentication.Challenge(properties,
+    source == IdentitySource.Workforce ? "workforce" : "external");
+return new HttpUnauthorizedResult(); // MVC action response</code></pre>
+          </details>
+          <p>Employee domains route to workforce; other Sampleapp01 addresses route to External ID. Email is routing input, never proof of identity. A workforce error stays a workforce error. Logout is a CSRF-protected POST calling <code>SignOut(Startup.CookieScheme)</code>.</p>
+        </section>
+
+        <section id="identity" aria-labelledby="identity-title">
+          <h3 id="identity-title">06 · Existing user mapping</h3>
+          <p>Replace lookups based on <code>DOMAIN\username</code> or email with an explicit mapping from validated <code>tid</code> + <code>oid</code> to the existing application user/employee key. The sample adds <code>subject_key = tid + ":" + oid</code>; app approvals are keyed by application, tenant and object ID.</p>
+          <p>Keep existing bookings and employee numbers. Store persona, sponsor, status, expiry and benefit eligibility beside the mapping. A dependent links to the workforce employee's stable IDs and requires a verified relationship plus a current, benefit-eligible same-app employee approval. Email changes must not create new access. Replace AD group assumptions with the explicit app roles and approval rules; connect production eligibility to the customer's employee/relationship data.</p>
+        </section>
+
+        <section id="authorization" aria-labelledby="authorization-title">
+          <h3 id="authorization-title">07 · Protected application paths</h3>
+          <p>Apply a shared guard at every protected MVC action, service endpoint and API, or in a Web Forms base page's <code>OnInit</code>. Port the sample's benefit check into that guard:</p>
+          <pre><code>var decision = RegistrationSignInPolicy.EvaluateApplicationAccess(
+    Startup.Config, principal,
+    RegistrationRuntime.ReadEntitlements(Startup.Config), DateTimeOffset.UtcNow);
+// Deny/stop the request unless decision.Allowed.</code></pre>
+          <p>Use the authenticated server principal. This check verifies the directory/source, signed persona role, current app approval and dependent eligibility. It rejects <code>registration_only</code> sessions. Menu visibility, <code>[Authorize]</code> or a role check alone does not apply these rules. Reload governance on protected requests so revocation takes effect.</p>
+        </section>
+
+        <section id="registration" aria-labelledby="registration-title">
+          <h3 id="registration-title">08 · Dependent registration</h3>
+          <p>Add the employee invitation page and recipient completion pages using <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationControllers.cs">RegistrationController</a>, <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistrationServices.cs">RegistrationRuntime</a> and <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FRegistration.cs">JsonInvitationStore</a>. An approved workforce <code>Employee</code> with current benefit eligibility may invite a dependent; server checks apply to every POST.</p>
+          <ol>
+            <li><code>InviteAsync</code> rechecks the sponsor, provisions/binds the External ID customer, assigns this app's <code>Dependent</code> role and emails the scoped invitation through ACS.</li>
+            <li><a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPasswordSetupController.cs">PasswordSetupController.cs</a> and <a href="index.html#code/sampleapp01/samples%2Fnet48%2FShared%2FPasswordSetup.cs">PasswordSetup.cs</a> verify email and let the recipient create a password. A separate native setup client uses Microsoft's native SSPR protocol for these pre-provisioned accounts; continuation state stays in a short server session. No password is emailed or persisted.</li>
+            <li>Normal MSAL login establishes a registration-only session. <code>CompletePost</code> rechecks identity and sponsor, atomically consumes the invitation and records approval; a fresh sign-in grants ordinary access.</li>
+          </ol>
+          <p>Home-page sign-in also resumes one unique current, sent invitation for the exact validated identity and app role. Invalid explicit links, duplicates and expired invitations fail. Keep CSRF protection, one-use token hashing and atomic storage; substitute a transactional production database for the PoC JSON store. Provisioning uses separate service permissions; interactive web login does not receive directory-write permissions.</p>
+          <div class="callout"><strong>Registration hosting:</strong> the current <code>RegistrationServices.cs</code> workforce Graph and ACS adapters require Azure App Service managed identity, its Graph application permissions and the ACS sender role. The external directory uses a separate provisioner. For VM or on-premises IIS, adapt token acquisition to a supported workload identity, certificate-backed service identity or secured registration service. The registration adapter cannot be copied unchanged to that host; ordinary OIDC login is independent of this dependency.</div>
+        </section>
+
+        <section id="iis" aria-labelledby="iis-title">
+          <h3 id="iis-title">09 · IIS and Windows dependencies</h3>
+          <p>On the isolated PoC IIS application, enable Anonymous authentication and disable Windows authentication so OIDC receives the request. Use an integrated CLR v4 application pool, HTTPS and <code>&lt;authentication mode="None" /&gt;</code>; remove FormsAuthentication if it intercepts requests. Preserve secure cookies, OWIN startup detection and required binding redirects from <a href="index.html#code/sampleapp01/samples%2Fnet48%2Fsampleapp01%2Fweb.config">web.config</a>. Anonymous IIS entry does not authorize protected application actions.</p>
+          <p>Review inherited IIS/ASP.NET URL authorization rules so login, OIDC callbacks and recipient setup routes can reach their handlers. Enforce application access in the shared guard; old Windows group rules do not authorize an External ID customer.</p>
+          <p>Audit Windows impersonation, <code>WindowsIdentity</code>, SQL integrated security and file/service access. An OIDC claims principal does not provide a Kerberos ticket or downstream delegation. Choose and test an explicit service identity or another supported downstream access design before production migration.</p>
+        </section>
+
+        <section id="acceptance" aria-labelledby="acceptance-title">
+          <h3 id="acceptance-title">10 · Acceptance and rollback</h3>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Test</th><th>Expected result</th></tr></thead>
+            <tbody>
+              <tr><td>Employee role + current approval</td><td>Existing business screens open; employee can invite a dependent.</td></tr>
+              <tr><td>Recipient email/password setup + confirmation</td><td>Fresh login admits only the approved dependent app/persona.</td></tr>
+              <tr><td>Password created; confirmation unfinished</td><td>Home login resumes confirmation; benefits remain denied.</td></tr>
+              <tr><td>Wrong identity/app, missing role, expired approval</td><td>Access denied, including direct endpoint requests.</td></tr>
+              <tr><td>Revoked/expired linked employee</td><td>Dependent loses protected access on the next policy check.</td></tr>
+              <tr><td>Workforce sign-in failure</td><td>No automatic switch to External ID.</td></tr>
+            </tbody>
+          </table></div>
+          <p>Deploy first to a separate test IIS application. Preserve the existing production binaries, IIS authentication settings and configuration for rollback. Restore those together if needed; do not overwrite durable invitation/governance records or automatically resend invitations.</p>
+        </section>
+
+        <section id="references" class="references" aria-labelledby="references-title">
+          <h3 id="references-title">Microsoft references</h3>
+          <ul>
+            <li><a href="https://github.com/AzureAD/microsoft-authentication-library-for-dotnet">MSAL.NET source and supported platforms</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/web-apps-apis/authorization-codes">MSAL authorization-code redemption</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/entra/msidweb/frameworks/owin">Microsoft.Identity.Web OWIN integration</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-register-ciam-app">External ID web application registration</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-use-app-roles-customers">External ID application roles</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/aspnet/identity/overview/getting-started/adding-aspnet-identity-to-an-empty-or-existing-web-forms-project">OWIN hosting in existing Web Forms applications</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/reference-native-authentication-api">Native account setup API reference</a></li>
+          </ul>
+          <p><a href="source/net48-source.zip">Download the sample source</a> · <a href="index.html#code/sampleapp01">Open Sampleapp01 source library</a> · <a href="index.html">Back to driver</a></p>
+        </section>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

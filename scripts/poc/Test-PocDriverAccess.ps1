@@ -12,7 +12,7 @@ $client = [Net.Http.HttpClient]::new($handler)
 $client.BaseAddress = $BaseUri
 $client.Timeout = [TimeSpan]::FromSeconds(45)
 try {
-    foreach ($path in @('/','/index.html','/site.css','/site.js','/code-samples.js','/lab-settings.json','/source/net48-source.zip','/unlisted-page.html')) {
+    foreach ($path in @('/','/index.html','/migration-sampleapp01.html','/migration.css','/site.css','/site.js','/code-samples.js','/lab-settings.json','/source/net48-source.zip','/unlisted-page.html')) {
         $response = $client.GetAsync($path).GetAwaiter().GetResult()
         try {
             $status = [int]$response.StatusCode
