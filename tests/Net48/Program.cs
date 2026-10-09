@@ -85,6 +85,7 @@ internal static class Program
         RegistrationFlowTests.Run(Check);
         WorkforceResolverTests.Run(Check);
         PasswordSetupTests.Run(Check);
+        CookieLifetimeTests.Run(Check);
         Console.WriteLine("Net48 policy: " + (total - failures) + "/" + total + " passed");
         return failures == 0 ? 0 : 1;
     }

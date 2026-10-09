@@ -21,6 +21,7 @@ publish/
 *.pdf
 *.oft
 *.png
+!/docs/customer-architecture.png
 *.jpg
 *.jpeg
 *.mp4

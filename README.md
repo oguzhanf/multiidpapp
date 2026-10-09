@@ -1,5 +1,9 @@
 # MultiIdpApp
 
+## Customer architecture
+
+See the customer architecture image ([PNG](docs/customer-architecture.png), [SVG](docs/customer-architecture.svg)) and [implementation walkthrough](docs/CUSTOMER-ARCHITECTURE.md) for the deployed .NET Framework PoC. They use generic tenant labels and omit deployment identifiers, personal data, and credentials. The [security review](docs/CUSTOMER-SECURITY-REVIEW.md) records verification and remaining operational limits.
+
 ## Customer PoC: ASP.NET on .NET Framework 4.8
 
 Use [the onsite driver](driver/index.html) and [the IIS samples](samples/net48/README.md) for the customer session. `sampleapp01` supports employees and approved retirees/dependents. `sampleapp02` adds approved Microsoft 365 partners through workforce B2B. Both use shared OWIN OpenID Connect and direct MSAL.NET code, with separate registrations in the workforce and External ID tenants.

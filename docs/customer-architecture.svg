@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="1780" viewBox="0 0 2300 1780" role="img" aria-labelledby="title description">
+  <title id="title">Implemented two-tenant identity PoC architecture</title>
+  <desc id="description">Two independent ASP.NET Framework 4.8 applications on Windows Azure App Service use OWIN and direct MSAL authorization code with PKCE. Each application has a separate web registration in Workforce tenant and External ID tenant. Employees use workforce identities, partners use workforce B2B only in Sample application 2, and approved retirees and dependents use External ID. Server-side entitlements control business access. Managed identities call workforce Microsoft Graph and Azure Communication Services Email. A separate provisioner and native password setup client support sponsored registration. A third, separately protected App Service hosts the operator driver. Documentation snapshot dated 9 October 2026; recipient redemption and real partner admission remain pending.</desc>
+  <defs>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #172c45; }
+      .title { font-size: 48px; font-weight: 700; letter-spacing: -1px; }
+      .subtitle { font-size: 26px; fill: #53667b; }
+      .eyebrow { font-size: 19px; font-weight: 700; letter-spacing: 2px; fill: #60728a; }
+      .heading { font-size: 29px; font-weight: 700; }
+      .subheading { font-size: 25px; font-weight: 700; }
+      .body { font-size: 23px; }
+      .small { font-size: 21px; }
+      .muted { fill: #53667b; }
+      .white { fill: #fff; }
+      .blue { fill: #275cad; }
+      .teal { fill: #097c78; }
+      .purple { fill: #7351a3; }
+      .strong { font-weight: 700; }
+      .card { fill: #fff; stroke: #d3deeb; stroke-width: 2; }
+      .line { fill: none; stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+    </style>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3970bd"/></marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#168d88"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8da0b8"/></marker>
+  </defs>
+
+  <rect width="2300" height="1780" fill="#f6f8fc"/>
+  <rect x="0" y="0" width="2300" height="9" fill="#275cad"/>
+  <text x="50" y="57" class="eyebrow">CUSTOMER ARCHITECTURE · IMPLEMENTED POC</text>
+  <text x="50" y="121" class="title">Two applications. Two identity tenants. Explicit application approval.</text>
+  <text x="50" y="167" class="subtitle">ASP.NET Framework 4.8 / IIS · shared authentication code, separate identities and sessions</text>
+  <text x="2250" y="56" text-anchor="end" class="eyebrow">09 OCT 2026</text>
+
+  <!-- The population row is an admission map, not a network path. -->
+  <rect x="50" y="205" width="700" height="137" rx="16" fill="#edf3fe" stroke="#c7d9f5" stroke-width="2"/>
+  <circle cx="87" cy="241" r="10" fill="#3970bd"/>
+  <text x="113" y="251" class="subheading blue">Employees</text>
+  <text x="78" y="288" class="body">Workforce tenant · Sample applications 1 and 2</text>
+  <text x="78" y="320" class="small muted">Signed Employee role + current approval in each app</text>
+
+  <rect x="780" y="205" width="720" height="137" rx="16" fill="#f2edfa" stroke="#dbcef0" stroke-width="2"/>
+  <circle cx="817" cy="241" r="10" fill="#8969b5"/>
+  <text x="843" y="251" class="subheading purple">Organizational partners</text>
+  <text x="808" y="288" class="body">Workforce B2B · Sample application 2 only</text>
+  <text x="808" y="320" class="small muted">Signed home-organization proof + Partner role + approval</text>
+
+  <rect x="1530" y="205" width="720" height="137" rx="16" fill="#eaf7f5" stroke="#bee4df" stroke-width="2"/>
+  <circle cx="1567" cy="241" r="10" fill="#168d88"/>
+  <text x="1593" y="251" class="subheading teal">Retirees, dependents and approved externals</text>
+  <text x="1558" y="288" class="body">External ID tenant · approval is specific to each app</text>
+  <text x="1558" y="320" class="small muted">Sponsor required; dependents also need benefit eligibility</text>
+
+  <!-- Azure application-hosting boundary. -->
+  <rect x="50" y="382" width="1370" height="858" rx="20" fill="#edf1f8" stroke="#b9c9dd" stroke-width="2"/>
+  <text x="80" y="431" class="heading">Azure application hosting</text>
+  <text x="80" y="466" class="small muted">Two Windows App Services · shared B1 plan · HTTPS · IIS integrated pipeline</text>
+
+  <rect x="80" y="494" width="638" height="244" rx="14" class="card"/>
+  <rect x="80" y="494" width="638" height="8" rx="4" fill="#3970bd"/>
+  <text x="106" y="540" class="heading">Sample application 1</text>
+  <text x="106" y="576" class="small muted">System.Web MVC · independent app cookie and configuration</text>
+  <text x="106" y="615" class="body">Exact sign-in UPN → workforce Graph lookup</text>
+  <text x="106" y="650" class="body">Found → workforce; confirmed absent → External ID</text>
+  <text x="106" y="685" class="small muted">Lookup failure stops routing; aliases are not resolved.</text>
+  <text x="106" y="718" class="small strong">Employees + approved external personas; partners denied</text>
+
+  <rect x="750" y="494" width="638" height="244" rx="14" class="card"/>
+  <rect x="750" y="494" width="638" height="8" rx="4" fill="#8969b5"/>
+  <text x="776" y="540" class="heading">Sample application 2</text>
+  <text x="776" y="576" class="small muted">System.Web MVC · independent app cookie and configuration</text>
+  <text x="776" y="615" class="body">Exact employee / approved partner domain routes</text>
+  <text x="776" y="650" class="body">Workforce for those routes; others → External ID</text>
+  <text x="776" y="685" class="small muted">Dynamic partner route requires redeemed current approval.</text>
+  <text x="776" y="718" class="small strong">Adds approved organizational B2B partners</text>
+
+  <path d="M 399 740 V 770" class="line" stroke="#8da0b8" marker-end="url(#arrow-gray)"/>
+  <path d="M 1069 740 V 770" class="line" stroke="#8da0b8" marker-end="url(#arrow-gray)"/>
+
+  <rect x="80" y="784" width="1308" height="206" rx="14" class="card"/>
+  <text x="106" y="827" class="subheading">Shared OWIN / Katana + direct MSAL.NET implementation</text>
+  <text x="106" y="869" class="small">Authorization code + PKCE; OWIN protects state and nonce</text>
+  <text x="106" y="905" class="small">MSAL redeems code using the selected web-client credential</text>
+  <text x="106" y="941" class="small">Separate /signin-workforce and /signin-external callbacks</text>
+  <line x1="725" y1="846" x2="725" y2="969" stroke="#d6e0ed" stroke-width="2"/>
+  <text x="751" y="869" class="small">JWT signature, issuer, audience, lifetime + tenant/object ID</text>
+  <text x="751" y="905" class="small">Signed persona role + app-specific server-side entitlement</text>
+  <text x="751" y="941" class="small">Secure / HttpOnly cookie; source fix caps it at 20 minutes</text>
+  <text x="106" y="976" class="small strong blue">Routing never grants access. A failed workforce sign-in never switches to External ID.</text>
+
+  <rect x="80" y="1016" width="1308" height="191" rx="14" fill="#f9fbfe" stroke="#c7d4e5" stroke-width="2"/>
+  <text x="106" y="1060" class="subheading">Server-only configuration and approval state</text>
+  <text x="106" y="1101" class="small strong">IIS-protected App_Data</text>
+  <text x="106" y="1135" class="small">Identity settings, baseline entitlements, registration settings</text>
+  <text x="106" y="1169" class="small muted">Credentials supplied through server App Service settings</text>
+  <line x1="725" y1="1080" x2="725" y2="1186" stroke="#d6e0ed" stroke-width="2"/>
+  <text x="751" y="1101" class="small strong">Persistent data outside wwwroot</text>
+  <text x="751" y="1135" class="small">Per-app invitations, approvals, token hashes, delivery audit</text>
+  <text x="751" y="1169" class="small muted">D:\home\data\… · atomic writes · excluded from deploy ZIP</text>
+
+  <!-- These connectors are logical OIDC relationships, including browser redirects and server code exchange. -->
+  <path d="M 1388 859 H 1456 V 692 H 1500" class="line" stroke="#3970bd" marker-end="url(#arrow-blue)"/>
+  <path d="M 1388 937 H 1478 V 1017 H 1500" class="line" stroke="#168d88" marker-end="url(#arrow-teal)"/>
+  <text x="1443" y="618" transform="rotate(-90 1443 618)" class="small blue">Workforce OIDC</text>
+  <text x="1465" y="1183" transform="rotate(-90 1465 1183)" class="small teal">External ID OIDC</text>
+
+  <!-- Identity tenant boundaries. -->
+  <rect x="1510" y="382" width="740" height="408" rx="20" fill="#edf3fe" stroke="#b7cef0" stroke-width="2"/>
+  <text x="1540" y="431" class="heading blue">Workforce tenant</text>
+  <text x="1540" y="467" class="small muted">Employees, workforce B2B guests and directory assignments</text>
+  <rect x="1540" y="491" width="324" height="107" rx="12" fill="#fff" stroke="#c7d9f5" stroke-width="2"/>
+  <text x="1562" y="531" class="subheading">App 1 web registration</text>
+  <text x="1562" y="569" class="small">Employee role</text>
+  <rect x="1884" y="491" width="336" height="107" rx="12" fill="#fff" stroke="#c7d9f5" stroke-width="2"/>
+  <text x="1906" y="531" class="subheading">App 2 web registration</text>
+  <text x="1906" y="569" class="small">Employee / Partner + capabilities</text>
+  <text x="1540" y="636" class="body strong">Each: own client, credential and registered callback</text>
+  <text x="1540" y="674" class="small">Assignment-required enterprise applications; signed app roles</text>
+  <text x="1540" y="711" class="small">Partner token identifies the guest in this tenant.</text>
+  <text x="1540" y="745" class="small">Signed idp must match the approved external home organization.</text>
+  <text x="1540" y="777" class="small muted">Email domain or an organizational account alone is insufficient.</text>
+
+  <rect x="1510" y="825" width="740" height="415" rx="20" fill="#eaf7f5" stroke="#b5ded8" stroke-width="2"/>
+  <text x="1540" y="874" class="heading teal">External ID tenant</text>
+  <text x="1540" y="910" class="small muted">Pre-provisioned customer accounts · email/password user flow</text>
+  <rect x="1540" y="934" width="324" height="107" rx="12" fill="#fff" stroke="#c3e2dc" stroke-width="2"/>
+  <text x="1562" y="974" class="subheading">App 1 web registration</text>
+  <text x="1562" y="1012" class="small">Retiree / Dependent / External</text>
+  <rect x="1884" y="934" width="336" height="107" rx="12" fill="#fff" stroke="#c3e2dc" stroke-width="2"/>
+  <text x="1906" y="974" class="subheading">App 2 web registration</text>
+  <text x="1906" y="1012" class="small">Retiree / Dependent / External</text>
+  <text x="1540" y="1080" class="body strong">Each: own client, credential and registered callback</text>
+  <text x="1540" y="1118" class="small">Both web clients are associated with the controlled user flow.</text>
+  <text x="1540" y="1155" class="small">Public sign-up disabled; role assignment + approval still required.</text>
+  <text x="1540" y="1192" class="small">Separate provisioner and public/native setup client, shown below.</text>
+  <text x="1540" y="1225" class="small muted">Customer identities are distinct from workforce guest identities.</text>
+
+  <text x="50" y="1293" class="heading">Server-side integration and operator access</text>
+  <text x="2250" y="1293" text-anchor="end" class="small muted">Separate from the four interactive web clients</text>
+
+  <rect x="50" y="1318" width="700" height="314" rx="16" class="card"/>
+  <text x="78" y="1362" class="subheading blue">Per-site managed identity</text>
+  <text x="78" y="1402" class="body strong">Workforce Microsoft Graph + ACS Email</text>
+  <text x="78" y="1441" class="small">App 1: exact UPN lookup; current sponsor / role checks</text>
+  <text x="78" y="1477" class="small">App 2: sponsor checks; B2B invite and Partner assignment</text>
+  <text x="78" y="1513" class="small">Both: managed email sender sends invitation links</text>
+  <text x="78" y="1549" class="small">Delivery operation tracked before network submission</text>
+  <text x="78" y="1597" class="small muted">Workforce Graph uses app-only tokens; ACS uses Azure RBAC.</text>
+
+  <rect x="780" y="1318" width="720" height="314" rx="16" class="card"/>
+  <text x="808" y="1362" class="subheading teal">External provisioning and account setup</text>
+  <text x="808" y="1402" class="body strong">App-only provisioner + separate public/native client</text>
+  <text x="808" y="1441" class="small">Provisioner: create / locate customer and assign app role</text>
+  <text x="808" y="1477" class="small">Native SSPR: verify email and set recipient-chosen password</text>
+  <text x="808" y="1513" class="small">No API permissions on setup client; sign-up stays disabled</text>
+  <text x="808" y="1549" class="small">Then normal web sign-in + one-use invitation confirmation</text>
+  <text x="808" y="1597" class="small muted">Setup does not issue the application's authenticated session.</text>
+
+  <rect x="1530" y="1318" width="720" height="314" rx="16" class="card"/>
+  <text x="1558" y="1362" class="subheading purple">Separate operator driver App Service</text>
+  <text x="1558" y="1402" class="body strong">Runbook, architecture and downloadable source</text>
+  <text x="1558" y="1441" class="small">Dedicated Workforce tenant registration and credential</text>
+  <text x="1558" y="1477" class="small">App Service EasyAuth; approved operator object-ID allowlist</text>
+  <text x="1558" y="1513" class="small">All paths protected: pages, assets, catalog, manifest, ZIP</text>
+  <text x="1558" y="1549" class="small">Same hosting plan; independent of the two app sessions</text>
+  <text x="1558" y="1597" class="small muted">The driver is documentation; it does not grant business access.</text>
+
+  <rect x="50" y="1660" width="2200" height="86" rx="14" fill="#fff6e6" stroke="#ebd6ab" stroke-width="2"/>
+  <text x="78" y="1696" class="small strong">Verification boundary</text>
+  <text x="337" y="1696" class="small">Source snapshot: web-client credentials require renewal; the cookie-cap fix still needs deployment and verification.</text>
+  <text x="78" y="1730" class="small muted">Real partner admission and personal recipient account setup / invitation redemption remain pending. Detailed flow and source evidence: CUSTOMER-ARCHITECTURE.md</text>
+</svg>

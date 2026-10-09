@@ -62,7 +62,7 @@ namespace MultiIdp.Net48
                 SignInAsAuthenticationType = CookieScheme, Authority = authority + "/v2.0",
                 ClientId = tenant.ClientId, RedirectUri = tenant.RedirectUri, CallbackPath = new PathString(new Uri(tenant.RedirectUri).AbsolutePath),
                 ResponseType = OpenIdConnectResponseType.Code, ResponseMode = OpenIdConnectResponseMode.FormPost,
-                Scope = "openid profile email", UsePkce = true, RedeemCode = true, SaveTokens = false,
+                Scope = "openid profile email", UsePkce = true, RedeemCode = true, SaveTokens = false, UseTokenLifetime = false,
                 RequireHttpsMetadata = true, CookieManager = new SystemWebCookieManager(),
                 SecurityTokenValidator = new StrictJwtSecurityTokenHandler { MapInboundClaims = false },
                 TokenValidationParameters = new TokenValidationParameters {

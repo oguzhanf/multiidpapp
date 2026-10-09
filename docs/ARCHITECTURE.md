@@ -1,5 +1,7 @@
 # Architecture and code walkthrough
 
+This document covers the ASP.NET Core reference. For the deployed .NET Framework PoC, use the [customer architecture image](customer-architecture.svg) and [implementation walkthrough](CUSTOMER-ARCHITECTURE.md).
+
 ```text
 Workforce account                    External ID customer
        |                                      |
