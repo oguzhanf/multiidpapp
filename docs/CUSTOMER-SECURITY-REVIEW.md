@@ -1,6 +1,6 @@
 # Security review and deployment status
 
-Review date: **9 October 2026**. Scope: the checked-in .NET Framework PoC, ASP.NET Core reference, deployment scripts, customer architecture artifacts, and selected read-only cloud checks. This is a scoped engineering review, not a penetration-test or production certification.
+Review and maintenance date: **9 October 2026**. Scope: the checked-in .NET Framework PoC, ASP.NET Core reference, deployment scripts, customer architecture artifacts, selected live checks and authorized deployment repairs. This is a scoped engineering review, not a penetration-test or production certification.
 
 ## Corrected session lifetime
 
@@ -8,7 +8,7 @@ The shared OIDC configuration now sets `UseTokenLifetime = false` for both ident
 
 Two regression tests execute the real startup configuration using synthetic values. Both failed before the correction; after it, the .NET Framework suite passes **234/234** with zero build warnings or errors. The separate ASP.NET Core reference passes **27/27**, also with a clean build. The mocked provisioning-script checks pass. Current NuGet advisory checks reported no known vulnerable direct or transitive packages in either solution.
 
-The Windows CI job now builds and tests the Framework applications and mocked provisioning scripts. CI also runs on PoC branch pushes. The existing reference-app job remains in place. Local checks passed; a hosted CI run is a separate result.
+The Windows CI job now builds and tests the Framework applications and mocked provisioning scripts. CI also runs on PoC branch pushes. An explicit reference-assemblies package pin fixes locked restore on clean Windows machines. Both hosted CI jobs passed for the deployed code revision, as did the local checks.
 
 ## Privacy and repository content
 
@@ -22,9 +22,13 @@ Older operational documents and the driver still contain environment-specific te
 
 Read-only checks against the deployment's recorded subscription confirmed three running Windows App Service sites. All enforce HTTPS, minimum TLS 1.2 for site and deployment endpoints, and disabled FTP. Both sample applications own their OWIN authentication. The separate driver has platform authentication enabled, requires sign-in on all paths, has one explicitly allowed operator identity and has its token store disabled.
 
-**Credential renewal is required.** Live directory metadata showed that each of the four interactive application registrations has one client secret, all expired on **7 October 2026**, with no unexpired replacement credentials. The private driver manifest also records an expired credential; its current directory credential metadata was not independently confirmed. Anonymous application home pages returned HTTP 200, which does not prove that sign-in works.
+**Credentials renewed.** All four interactive web clients, the driver and the external provisioner received replacement credentials expiring **7 January 2027**. Each replacement was accepted at the token endpoint with the expected client and tenant binding. Runtime setting readback matched the new credentials; unrelated settings were unchanged. The six tracked expired keys were retired after verification. Secret values and rollback material remain in protected private storage outside the repository.
 
-No cloud settings, credentials, assignments or deployments were changed by this review. The session-lifetime correction is a source change and must be deployed before it can protect live sessions. The deployment process does not expose a reliable source-commit marker; the exact currently deployed revision was not established.
+**Access renewed within the existing scope.** With explicit owner approval, eight baseline approval records and one registered approval were extended through **8 November 2026**, along with the invitation creation window. Existing users, personas, relationships, roles and assignments were retained. All eight invitation records, including their expiry and one-use state, were preserved. Renewing the window does not reactivate an expired invitation.
+
+**Patched code deployed.** Both application DLLs were downloaded after deployment and matched the tested build hashes. Full private site backups were captured first. Live configuration was preserved apart from the authorized expiry updates; runtime invitation state stayed outside deployment content. Source-version markers now identify the deployed code. The driver retains its all-path authentication boundary.
+
+**Live checks passed.** External ID retiree sign-in succeeded in both applications, and dependent sign-in succeeded in application 1. Each check verified protected admission, PKCE/state/nonce, secure host-scoped cookies, antiforgery-protected logout and denied access afterward. HTTP checks verified both authority routes and protected `App_Data`. The 20-minute ticket limit is established by regression tests and the exact deployed binary; browser session-cookie metadata cannot independently reveal the protected ticket expiry.
 
 ## Remaining operational boundaries
 

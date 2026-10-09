@@ -85,7 +85,7 @@
   <line x1="725" y1="846" x2="725" y2="969" stroke="#d6e0ed" stroke-width="2"/>
   <text x="751" y="869" class="small">JWT signature, issuer, audience, lifetime + tenant/object ID</text>
   <text x="751" y="905" class="small">Signed persona role + app-specific server-side entitlement</text>
-  <text x="751" y="941" class="small">Secure / HttpOnly cookie; source fix caps it at 20 minutes</text>
+  <text x="751" y="941" class="small">Secure / HttpOnly cookie; fixed 20-minute application session</text>
   <text x="106" y="976" class="small strong blue">Routing never grants access. A failed workforce sign-in never switches to External ID.</text>
 
   <rect x="80" y="1016" width="1308" height="191" rx="14" fill="#f9fbfe" stroke="#c7d4e5" stroke-width="2"/>
@@ -167,6 +167,6 @@
 
   <rect x="50" y="1660" width="2200" height="86" rx="14" fill="#fff6e6" stroke="#ebd6ab" stroke-width="2"/>
   <text x="78" y="1696" class="small strong">Verification boundary</text>
-  <text x="337" y="1696" class="small">Source snapshot: web-client credentials require renewal; the cookie-cap fix still needs deployment and verification.</text>
+  <text x="337" y="1696" class="small">Deployment checked 9 October 2026. Sign-in, session controls and source version verified on both applications.</text>
   <text x="78" y="1730" class="small muted">Real partner admission and personal recipient account setup / invitation redemption remain pending. Detailed flow and source evidence: CUSTOMER-ARCHITECTURE.md</text>
 </svg>
