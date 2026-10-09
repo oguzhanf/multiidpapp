@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2300" height="1780" viewBox="0 0 2300 1780" role="img" aria-labelledby="title description">
-  <title id="title">Implemented two-tenant identity PoC architecture</title>
+  <title id="title">Web application with two IdP authorities</title>
   <desc id="description">Two independent ASP.NET Framework 4.8 applications on Windows Azure App Service use OWIN and direct MSAL authorization code with PKCE. Each application has a separate web registration in Workforce tenant and External ID tenant. Employees use workforce identities, partners use workforce B2B only in Sample application 2, and approved retirees and dependents use External ID. Server-side entitlements control business access. Managed identities call workforce Microsoft Graph and Azure Communication Services Email. A separate provisioner and native password setup client support sponsored registration. A third, separately protected App Service hosts the operator driver. Documentation snapshot dated 9 October 2026; recipient redemption and real partner admission remain pending.</desc>
   <defs>
     <style>
@@ -28,7 +28,7 @@
   <rect width="2300" height="1780" fill="#f6f8fc"/>
   <rect x="0" y="0" width="2300" height="9" fill="#275cad"/>
   <text x="50" y="57" class="eyebrow">CUSTOMER ARCHITECTURE · IMPLEMENTED POC</text>
-  <text x="50" y="121" class="title">Two applications. Two identity tenants. Explicit application approval.</text>
+  <text x="50" y="121" class="title">Web application with two IdP authorities</text>
   <text x="50" y="167" class="subtitle">ASP.NET Framework 4.8 / IIS · shared authentication code, separate identities and sessions</text>
   <text x="2250" y="56" text-anchor="end" class="eyebrow">09 OCT 2026</text>
 

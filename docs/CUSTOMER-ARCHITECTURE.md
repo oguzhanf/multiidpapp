@@ -1,4 +1,4 @@
-# Implemented customer identity PoC architecture
+# Web application with two IdP authorities
 
 Documentation snapshot: **9 October 2026**. This document describes the implemented **ASP.NET Framework 4.8 / IIS PoC**, its deployment scripts and its security boundaries. It does not attest to the current state of live resources. The separate ASP.NET Core sample in this repository is outside this diagram's scope.
 
